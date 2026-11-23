@@ -132,12 +132,25 @@ Extract, merge, render the spec, and evaluate gates. `merge_profile` never delet
 
 Word COM, file lock at `$env:USERPROFILE\.gemini\tmp\word_com.lock`. `-MaxDeltaPt` and `-MinBottomPt` default to 5.25 and 745; pass the current profile values after a template import changes `layout_policy`. A page with only one column is not scored. If no two-column page exists, alignment fails.
 
+## 格式修改顺序
+
+改稿按下面的顺序做。先做完前面一档并再跑一次 `audit`，再进入下一档。不要为了过后面的栏位检查，回过头去改已经符合档案的字体或行距。
+
+1. **字体和字号。** 只改 `eastAsia`、`ascii` 和 `sz`：正文、各级标题、摘要和关键词、图表题、表内、页眉、责任编辑。这一档不动段前段后，不改图片大小。
+2. **行距和段间距。** 把该用单倍的段落改回单倍并与网格对齐，把摘要、图表题、表内、参考文献、附录、作者简介改成档案里的固定行距（当前是 14 pt）。段前、段后只改到档案规定的磅值，例如标题 6 pt、英文单位段后 12 pt。不要为了少一行把行距再压低。
+3. **缩进和对齐。** 正文首行 0.74 cm，参考文献悬挂 0.63 cm，标题悬挂为 0，图表题居中，编号公式右对齐。
+4. **页面。** 纸张、页边距、栏数、栏距、文档网格、页眉刊名和两个制表位。
+5. **字符级排版。** 数字千分位和数字与单位之间的 1/4 字空、列项 `1）`、参考文献的全角标点和类型标志。
+6. **公式和交叉引用。** 运行 `build-mt`、`fix-refs`。公式行距仍按第 2 档，不另设一套更大的固定行距。
+7. **图表。** 嵌入型、居中、中英文题成对、三线表、制表位对齐。图内和表内字号停在第 1 档的 7.5 pt，不把图缩小来换栏位。
+8. **表述和双栏。** 最后才改句子。栏底不齐或段末单字时，删套话、拆长句或在同一小节内移动段落，然后运行 `measure_and_export.ps1`，再带 `--columns` 审计。目视项（位图字号、GB 3100、主副线、坐标标目、录波格值）放在这一档核对，核对完才加对应开关。
+
 ## Workflow
 
 1. If the user supplied a new template, run `import-template` and read `updated` and `kept`. Do not loosen a kept field.
 2. Read [csee_template_spec.md](./references/csee_template_spec.md) and [academic_prose_checklist.md](./references/academic_prose_checklist.md). Run `audit`.
-3. Repair only failed gates. Keep physical and model boundaries while removing clichés. Put numbers and units in the same table cell or in the header. Keep `Figure/Table -> Caption -> Interpretation` and `keepNext` where the profile requires it.
-4. Run `build-mt` and `fix-refs`.
+3. Repair failed gates in the order in **格式修改顺序**, starting with font and size, then line spacing. Re-run `audit` after each stage before touching figures, prose, or column breaks.
+4. Run `build-mt` and `fix-refs` only after font, line spacing, indents, and page setup match the profile.
 5. Run `measure_and_export.ps1`, then `audit --columns`. If a column is short, rewrite or move prose in that column. Do not compress line spacing, figures, or chart fonts.
 6. Inspect the PDF. Stop only when `stop.allowed` is true.
 
@@ -149,7 +162,7 @@ Word COM calls share `$env:USERPROFILE\.gemini\tmp\word_com.lock` (120 s, poll 1
 
 1. **Stopping on a partial audit.** A report with `stop.allowed: false` is not a pass, including when the only pending gate is `columns` because `--columns` was omitted.
 2. **Treating an omitted template field as permission to drop it.** Import leaves that field at its previous value, and the audit still enforces it.
-3. **Compressing type or artwork to fix the columns.** Change the wording. Figure interior type stays at `figure_interior.size_pt` (currently 7.5 pt). Table type stays at `table_cell.size_pt` (currently 7.5 pt) with its exact line spacing.
+3. **Starting with column fitting.** Fonts and line spacing come first. Do not move paragraphs, shrink figures, or change spacing below the profile in order to clear a later gate. Figure interior type stays at `figure_interior.size_pt` (currently 7.5 pt). Table type stays at `table_cell.size_pt` (currently 7.5 pt) with its exact line spacing.
 4. **Omitting `\* CHARFORMAT`.** Caption bold then leaks into body cross-references and changes line breaks.
 5. **A trailing single-column section after 作者简介.** The last `sectPr` stays the two-column section.
 6. **A large exact line pitch on displayed equations.** Follow `roles.equation`. The current profile uses single spacing, not `line="646" lineRule="exact"`, and not a tighter pitch than that profile.
