@@ -1,11 +1,10 @@
 ---
 name: journal-docx-formatting-audit
 description: >-
-  Audits Chinese journal Word manuscripts and can also author a HUST course
-  report in XeLaTeX using the bundled CSEE class. When the user supplies a new
-  .doc or .docx template, import-template updates only the fields that template
-  states or shows, in both the Word profile and the matching lines of
-  csee-report.cls. Every field the new template does not define stays unchanged.
+  Audits and typesets Chinese journal Word manuscripts against a merged template
+  profile (default Proceedings of the CSEE). When the user supplies a new .doc
+  or .docx template, import-template updates only the fields that template
+  states or shows; every field the new template does not define stays unchanged.
   Line spacing, figure interior font size, and table font size are hard gates.
   Layout shortfalls are fixed by rewriting prose, not by compressing line
   spacing, figures, or chart type. Stop only when audit JSON stop.allowed is true.
@@ -42,19 +41,7 @@ description: >-
 
 - 模板用句子写明的数值，或在对应样本段落上设置的字体、字号、行距、缩进、页面，写入档案并覆盖同名字段。
 - 模板没有出现的角色、没有写明的字段，以及 `layout_policy`，保持导入前的值。不删除，也不改回 Word 默认页边距或默认行距。
-- 同一份合并结果写回 `latex/assets/template/csee-report.cls` 里对应的页边距、栏距、行距系数、公式上下标尺寸和刊名。类文件里的命令、参考文献样式、图表环境和 Word 转换脚本不因模板没提到它们而被改掉。合并报告的 `latex_updated` 列出这次动过的 cls 项；空列表表示 cls 保持原样。
 - 合并报告里的 `updated` 是这次改动的档案字段，`kept` 是继续有效的字段。审计对两边一视同仁，缺一项 `stop.allowed` 就是 false。
-
-## LaTeX 课程报告
-
-新建华科课程报告、把已有文字排成机报正文，或先出 PDF 再转 Word 时，用 `latex/`，不要改已有 Word 稿的审计流程。
-
-- 模板和类文件：`latex/assets/template/`（`csee-report.cls`、`csee-gbt7714.bst`、`main.tex`、`refs.bib`）。
-- 新建：`python latex/scripts/new_report.py <报告文件夹>`。
-- 编译并导出逐页 PNG：`python latex/scripts/build.py <报告文件夹>`。需要本机 XeLaTeX、latexmk，以及 Python 包 `pymupdf`。
-- 用户要求交 Word 时：`python latex/scripts/to_word.py <报告文件夹> --pdf`。需要 pandoc 和 Word。公式是 Word 内置公式，不是 MathType；交期刊 Word 前再按上面的 Word 审计和 `build-mt` 处理。
-- 写法、字号和 bib 字段读 `latex/references/format.md`。转换差异读 `latex/references/word.md`。
-- 只改报告自己的 `main.tex` 和 `refs.bib`。版式数字以 `references/csee_profile.json` 为准，由 `import-template` 写回 cls，不要在 main.tex 里另设一套页边距。
 
 ## Overview
 
