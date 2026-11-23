@@ -1,8 +1,10 @@
-param(
+﻿param(
     [Parameter(Mandatory=$true)][string]$DocxPath,
     [Parameter(Mandatory=$true)][string]$PdfPath,
     [Parameter(Mandatory=$true)][string]$JsonOutPath,
-    [Parameter(Mandatory=$false)][string]$TargetDocxPath = ""
+    [Parameter(Mandatory=$false)][string]$TargetDocxPath = "",
+    [Parameter(Mandatory=$false)][double]$MaxDeltaPt = 5.25,
+    [Parameter(Mandatory=$false)][double]$MinBottomPt = 745
 )
 
 $lockDir = Join-Path $env:USERPROFILE ".gemini\tmp"
@@ -36,6 +38,9 @@ try {
     $wordPages = [int]$doc.ComputeStatistics(2)
 
     $idx = 0
+    $inRefs = $false
+    $orphans = @()
+    $lineStarts = @()
     foreach ($p in $doc.Paragraphs) {
         $idx++
         $inTbl = $p.Range.Information(12)
@@ -51,6 +56,46 @@ try {
         $pg2 = [int]$r2.Information(3)
         $x2 = [math]::Round([double]$r2.Information(5), 2)
         $y2 = [math]::Round([double]$r2.Information(6), 2)
+
+        $plain = ($p.Range.Text -replace "[\r\a]", "").Trim()
+        if ($plain -match "^参考文献\s*$") { $inRefs = $true }
+        elseif ($plain -match "^(附录|作者简介|致\s*谢)") { $inRefs = $false }
+        if ((-not $inTbl) -and (-not $inRefs) -and ($plain.Length -gt 1) -and ($plain -notmatch "^(图|表|Fig\.|Tab\.)")) {
+            $bodyRange = $p.Range.Duplicate
+            $null = $bodyRange.MoveEnd(1, -1)
+            if ($bodyRange.End -gt $bodyRange.Start) {
+                $firstLine = $bodyRange.Duplicate
+                $firstLine.Collapse(1)
+                $null = $firstLine.Expand(5)
+                $lastLine = $bodyRange.Duplicate
+                $lastLine.Collapse(0)
+                $null = $lastLine.Expand(5)
+                if ($firstLine.Start -ne $lastLine.Start) {
+                    $lastText = ($lastLine.Text -replace "\s", "" -replace "[。．.，,；;：:、）)]", "")
+                    if (($lastText.Length -eq 1) -and ($lastText -match "[\u4e00-\u9fff]")) {
+                        $orphans += [ordered]@{ page = $pg1; text = $plain.Substring(0, [Math]::Min(40, $plain.Length)) }
+                    }
+                }
+                $cursor = $bodyRange.Duplicate
+                $cursor.Collapse(1)
+                $guard = 0
+                while (($cursor.Start -lt $bodyRange.End) -and ($guard -lt 40)) {
+                    $guard++
+                    $ln = $cursor.Duplicate
+                    $null = $ln.Expand(5)
+                    $ltxt = $ln.Text.TrimStart()
+                    $isList = $ltxt -match "^\d+）"
+                    $badRef = $ltxt -match "^\[\d+\]"
+                    $badUnit = $ltxt -match "^(MW|kW|GW|Hz|kHz|mHz|kV|mm|cm|km|pu|%)\b"
+                    if ((-not $isList) -and ($badRef -or $badUnit)) {
+                        $lineStarts += [ordered]@{ page = $pg1; text = $ltxt.Substring(0, [Math]::Min(30, $ltxt.Length)) }
+                    }
+                    if ($ln.End -ge $bodyRange.End) { break }
+                    $cursor.SetRange($ln.End, $ln.End)
+                    $null = $cursor.Move(1, 1)
+                }
+            }
+        }
 
         if ($idx -le 8) { continue }
         $col1 = if ($x1 -lt 290) { "L" } else { "R" }
@@ -107,6 +152,7 @@ $pdfPages = ([regex]::Matches($pdfStr, "/Type\s*/Page\b")).Count
 
 $pageList = @()
 $allAligned = $true
+$twoColPages = 0
 for ($pg = 1; $pg -le $wordPages; $pg++) {
     $L = $cols["$pg-L"]
     $R = $cols["$pg-R"]
@@ -116,8 +162,11 @@ for ($pg = 1; $pg -le $wordPages; $pg++) {
     $rb = if ($R) { ($R | Measure-Object -Maximum).Maximum } else { 0.0 }
     $dT = [math]::Round($lt - $rt, 2)
     $dB = [math]::Round($lb - $rb, 2)
-    if (([math]::Abs($dT) -gt 5.25) -or ([math]::Abs($dB) -gt 5.25) -or ($lb -lt 745.0) -or ($rb -lt 745.0)) {
-        $allAligned = $false
+    if (($lb -gt 0) -and ($rb -gt 0)) {
+        $twoColPages++
+        if (([math]::Abs($dT) -gt $MaxDeltaPt) -or ([math]::Abs($dB) -gt $MaxDeltaPt) -or ($lb -lt $MinBottomPt) -or ($rb -lt $MinBottomPt)) {
+            $allAligned = $false
+        }
     }
     $pageList += [ordered]@{
         page = $pg
@@ -130,12 +179,19 @@ for ($pg = 1; $pg -le $wordPages; $pg++) {
     }
 }
 
+if ($twoColPages -eq 0) { $allAligned = $false }
 $outObj = [ordered]@{
     word_pages = $wordPages
     pdf_pages = $pdfPages
     pages_match = ($wordPages -eq $pdfPages)
+    max_delta_pt = $MaxDeltaPt
+    min_bottom_pt = $MinBottomPt
     all_columns_aligned_within_5_25pt = $allAligned
     pages = $pageList
+    line_breaks = [ordered]@{
+        orphans = @($orphans)
+        line_starts = @($lineStarts)
+    }
 }
 $outObj | ConvertTo-Json -Depth 5 | Set-Content -Path $JsonOutPath -Encoding UTF8
 Write-Host "Success! Metrics written to: $JsonOutPath (word_pages=$wordPages, pdf_pages=$pdfPages, all_aligned=$allAligned)"

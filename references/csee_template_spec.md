@@ -1,33 +1,75 @@
-# 《中国电机工程学报》(Proceedings of the CSEE) Word 排版规范参考表
+# 当前学报模板版式档案
 
-## 1. 页面设置与分栏
-- **纸张大小**：A4（宽 `21.0 cm` = `11906` twips，高 `29.7 cm` = `16838` twips）。
-- **页边距（`w:pgMar`）**：
-  - 上边距 `top="1814"`（`3.20 cm`）
-  - 下边距 `bottom="1417"`（`2.50 cm`）
-  - 左边距 `left="1134"`（`2.00 cm`）
-  - 右边距 `right="1134"`（`2.00 cm`）
-  - 页眉距边界 `header="1247"`（`2.20 cm`），页脚距边界 `footer="992"`（`1.75 cm`）
-- **分节与分栏（`w:cols`）**：
-  - **第 1 节（篇首单栏）**：从中图分类号、中英文标题、作者及单位至英文单位结束，使用连续分节符转入第 2 节。
-  - **第 2 节（双栏正文直通文末）**：从英文 `ABSTRACT` 起直至 `参考文献` 和 `作者简介` 结束，全程保持双栏 `num="2"`、栏距 `space="442"`（`0.78 cm`）。**严禁在文末增设空的单栏第 3 节**。
-- **双栏对齐硬性判据**：
-  - 每页左栏与右栏顶部坐标差 $|\Delta T| \le 5.25\text{ pt}$（半个五号字符），底部坐标差 $|\Delta B| \le 5.25\text{ pt}$；
-  - 除篇首跨栏标题外，正文各页栏底均应抵达 `748~756 pt`，不得出现局部留白。
+数值以 `references/csee_profile.json` 为准。导入新模板时，只覆盖该模板实际写明或在对应样本上设置的字段；模板没有的字段保持原值，不回退到 Word 默认值，也不从档案中删除。
 
-## 2. 字体、字号与行距
-- **英文摘要（`ABSTRACT` / `KEY WORDS`）**：`9 pt`（小五，`sz="18"`）Times New Roman，两端对齐（`jc="both"`），**开启自动连字符断词**（不得添加 `<w:suppressAutoHyphens/>`，且 `settings.xml` 启用 `<w:autoHyphenation/>`）。
-- **中文摘要与关键词**：`9 pt`（小五，`sz="18"`）宋体+Times New Roman，标题“摘要：”“关键词：”黑体加粗，两端对齐。
-- **一级标题（`0 引言`、`1 ...`）**：`12 pt`（四号，`sz="24"`）黑体+Arial，左对齐，与下段同页（`keepNext`），绑定书签供 `REF ... \w \h \* CHARFORMAT` 引用。
-- **二级标题（`1.1 ...`）**：`10.5 pt`（五号，`sz="21"`）黑体+Arial，左对齐，与下段同页（`keepNext`）。
-- **正文段落**：`10.5 pt`（五号，`sz="21"`）宋体+Times New Roman，首行缩进 2 字符（`firstLine="420"`），单倍行距，两端对齐。数字与物理单位之间使用 `1/4 em` 窄空格（`\u2005`）。
-- **独立编号公式**：
-  - 行距设为 `lineRule="atLeast"`（至少等于公式对象高度，如 `350~360` twips），段前 `before="60"`（`3 pt`）、段后 `after="60"`（`3 pt`）；
-  - 制表位：居中制表位 `pos="2282"` 放公式对象，右对齐制表位 `pos="4564"` 放 `(SEQ 公式 \* ARABIC)` 编号。
-- **图表与三线表**：
-  - 图题、表题均采用中英文双语对照（中文小五黑体加粗 `sz="18"`，内嵌 `SEQ 图/表 \* ARABIC` 域与书签；英文小五 Times New Roman 加粗 `sz="18"`），居中，行距固定 `14 pt`（`280` twips）。
-  - 图片严禁非等比压缩变形，图框与中英文图题必须同栏绑定（`keepNext`）；表题与三线表同栏绑定。
-  - 三线表表内文字为 `7.5 pt`（六号，`sz="15"`）宋体+Times New Roman，顶底线 `0.75 pt`（`sz="6"`），栏目线 `0.5 pt`（`sz="4"`），数值与单位须统一放在同一单元格或统一写入表头。
-- **参考文献与作者简介**：
-  - 参考文献与作者简介使用 `9 pt`（小五，`sz="18"`）宋体+Times New Roman，悬挂缩进 `357` twips。
-  - 作者简介若无第一作者本人照片（`2.2 cm × 2.8 cm`），不得使用他人照片代替。
+栏底不齐、留白或末页溢出时，用改写表述改变行数。不得把行距压到档案规定值以下，不得缩小图，不得把图内或表内字体降到档案中的图表字号以下。
+
+`audit` 的 `stop.allowed` 为 true 之前，任务不得结束。档案里的每一条闸门都要满足，包括这次模板没有改写、因此仍然有效的旧规定。
+
+## 页面
+
+- 纸宽：`11906` twips（21.0 cm）
+- 纸高：`16838` twips（29.7 cm）
+- 上边距：`1814` twips（3.2 cm）
+- 下边距：`1417` twips（2.5 cm）
+- 左边距：`1134` twips（2.0 cm）
+- 右边距：`1134` twips（2.0 cm）
+- 页眉距边界：`1134` twips（2.0 cm）
+- 页脚距边界：`0` twips（0.0 cm）
+- 栏距：`442` twips（0.78 cm）
+- 文档网格：每页 42 行，每行 45 字，半栏 21 字，行距基准 `324` twips，与网格对齐：True
+- 第 1 节 1 栏，第 2 节 2 栏。模板若没有第 2 节，不改已有的第 2 节栏数。
+- 页眉：9 pt 宋体+Times New Roman，居中制表位 8.5 cm，居右制表位 16.8 cm。奇偶页眉 True，首页不同 True。
+
+## 角色
+
+- `front_common`：line=single；snap=True
+- `front_meta`：size_pt=9；eastAsia=黑体；ascii=Times New Roman；line=single；snap=True
+- `title_zh`：size_pt=22；eastAsia=黑体；ascii=Arial；before_pt=12.0；align=center；line=single；snap=True
+- `authors`：size_pt=14；eastAsia=仿宋_GB2312；align=center；line=single；snap=True；ascii=仿宋_GB2312
+- `affiliation_zh`：size_pt=10.5；eastAsia=楷体_GB2312；ascii=Times New Roman；align=center；line=single；snap=True
+- `title_en`：size_pt=12；ascii=Times New Roman；bold=True；align=center；line=single；snap=True
+- `authors_en`：size_pt=10.5；ascii=Times New Roman；align=center；line=single；snap=True
+- `affiliation_en`：size_pt=9；ascii=Times New Roman；after_pt=12.0；align=center；line=single；snap=True
+- `abstract_en`：size_pt=9；ascii=Times New Roman；line_exact_pt=14.0；align=both
+- `keywords_en`：size_pt=9；ascii=Times New Roman；line_exact_pt=14.0；before_pt=6.0；align=both
+- `abstract_zh`：size_pt=9；eastAsia=宋体；ascii=Times New Roman；label_eastAsia=黑体；label_bold=True；line_exact_pt=14.0；before_pt=6.0；align=both
+- `keywords_zh`：size_pt=9；eastAsia=宋体；ascii=Times New Roman；label_eastAsia=黑体；label_bold=True；line_exact_pt=14.0；before_pt=6.0；align=both
+- `heading1`：size_pt=12；eastAsia=黑体；ascii=Arial；before_pt=6.0；after_pt=6.0；hanging_twips=0；line=single；snap=True；keep_next=True；bold=True
+- `heading2`：size_pt=10.5；eastAsia=黑体；ascii=Arial；before_pt=0；after_pt=0；hanging_twips=0；line=single；snap=True；keep_next=True
+- `heading3`：size_pt=10.5；eastAsia=宋体；ascii=Times New Roman；before_pt=0；after_pt=0；hanging_twips=0；line=single；snap=True
+- `body`：size_pt=10.5；eastAsia=宋体；ascii=Times New Roman；first_line_twips=420；line=single；snap=True；align=both
+- `equation`：line=single；snap=True；before_twips=0；after_twips=0；align=right；mt_full_pt=10.5；mt_sub_pt=6.5；mt_ssub_pt=4.5；mt_symbol_pt=15.0；mt_subsymbol_pt=12.0
+- `caption_zh`：size_pt=9；eastAsia=黑体；ascii=Times New Roman；bold=True；align=center；line_exact_pt=14.0；before_pt=3.0；keep_next=True
+- `caption_en`：size_pt=9；ascii=Times New Roman；bold=True；align=center；line_exact_pt=14.0；after_pt=3.0；keep_next=True
+- `table_cell`：size_pt=7.5；eastAsia=宋体；ascii=Times New Roman；line_exact_pt=14.0；align=center；border_top_bottom_eighths=6；border_inside_eighths=4
+- `figure_interior`：size_pt=7.5；eastAsia=宋体；ascii=Times New Roman
+- `references_heading`：size_pt=12.0；eastAsia=黑体；ascii=Times New Roman；before_pt=4.0；after_pt=4.0；line=single
+- `references`：size_pt=9；eastAsia=宋体；ascii=Times New Roman；line_exact_pt=14.0；hanging_twips=357
+- `biography`：size_pt=9；eastAsia=宋体；ascii=Times New Roman；line_exact_pt=14.0；first_line_twips=357；photo_min_px=[260, 330]
+- `acknowledgment_heading`：size_pt=10.5；eastAsia=黑体；align=center；before_pt=6.0；line=single；ascii=Times New Roman
+- `acknowledgment`：size_pt=9.0；eastAsia=楷体_GB2312；first_line_twips=420；line=single；align=both；ascii=楷体_GB2312
+- `appendix_heading`：size_pt=9.0；eastAsia=黑体；ascii=Arial；before_pt=3.0；after_pt=3.0；line=single；snap=False
+- `appendix`：size_pt=9；eastAsia=宋体；ascii=Times New Roman；line_exact_pt=14.0；hanging_twips=0
+- `editor`：size_pt=10.5；label_eastAsia=黑体；name_eastAsia=楷体_GB2312；align=right；before_pt=6.0；line=single
+
+## 正文、图表、参考文献与页眉
+
+- 段末不单字成行：`True`。参考文献序号和数字后的单位不放在行首：`True`。
+- 数字自小数点起每 3 位留 1/4 字空：`True`。数字与单位之间留 1/4 字空：`True`。列项标记：`1）`。
+- 图用嵌入型并居中：`True` / `True`。中英文题成对：`True`。主副线、坐标标目、录波格值须目视核对：`True` / `True` / `True`。
+- 表头单位用分数，百分数写成 `φB/%`，列用制表位而不是空格对齐：`True` / `True` / `True`。
+- 参考文献编号后空 2 小格；括号半角、其余全角：`True`；GB/T 7714 类型标志：`True`；外文刊名不缩写：`True`。
+- 符号按 GB 3100～3102 且全文一致，缩写首次出现时给出中文全称(英文全称，缩写)：`True` / `True`。
+- 页眉须包含：中国电机工程学报、Proceedings of the CSEE。并核对页眉字号与居中、居右制表位。
+
+## 图表字号
+
+- 图题、表题见 `caption_zh` / `caption_en`。图内文字见 `figure_interior`，当前为 7.5 pt。表内文字见 `table_cell`，当前为 7.5 pt，行距 14.0 pt。
+- 图内文字若只存在于位图中，OOXML 读不到字号。必须逐图核对为档案中的图内字号后，审计才可以带 `--figure-fonts-verified`。该开关不跳过任何其他闸门，也不能用来接受更小的字号。
+
+## 版面与停止
+
+- 调整手段：`prose`。禁止压行距：True。禁止缩图：True。禁止缩小图表字体：True。
+- 双栏：左右栏顶、底坐标差绝对值不超过 5.25 pt；两栏都有文字的页，栏底不低于 745 pt。
+- 编号公式的行距、段前段后和 MathType 尺寸以 `roles.equation` 为准。禁止用更大的固定行距把公式行撑开，也禁止为了省行把行距降到该值以下。

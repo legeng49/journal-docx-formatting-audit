@@ -1,113 +1,142 @@
 ---
 name: journal-docx-formatting-audit
 description: >-
-  Audits, repairs, and typesets Chinese and SCI academic journal Word (.docx)
-  manuscripts (with built-in CSEE template standards and custom template
-  support). Converts all special characters and adjacent physical units into
-  native MathType (Equation.DSMT4) OLE objects without opening MathType UI,
-  fixes inline formula baselines and displayed equation spacing, converts
-  section/figure/table/equation cross-references to Word REF/SEQ fields with
-  CHARFORMAT, tightens academic prose by removing clichés and redundant
-  defensive disclaimers, and calibrates strict two-column top/bottom alignment
-  (error <= 0.5 chars / 5.25 pt) with zero blank regions via Word COM
-  coordinate measurement and PDF export verification.
+  Audits and typesets Chinese journal Word manuscripts against a merged template
+  profile (default Proceedings of the CSEE). When the user supplies a new .doc
+  or .docx template, import-template updates only the fields that template
+  states or shows; every field the new template does not define stays unchanged.
+  Line spacing, figure interior font size, and table font size are hard gates.
+  Layout shortfalls are fixed by rewriting prose, not by compressing line
+  spacing, figures, or chart type. Stop only when audit JSON stop.allowed is true.
 ---
 
 # Journal Word (.docx) Formatting Audit & Two-Column Typesetting
 
+## 通过条件
+
+审计报告里的 `stop.allowed` 为 true 之前，不得结束，也不得把稿件说成已经通过。`passed` 与 `stop.allowed` 只有在档案里的全部门闩都成立时才为 true。其中包含本次模板没有改写、因此继续有效的旧规定。
+
+栏底不齐、出现留白或末页溢出时，改写表述（删套话、拆长句、去掉重复判断，或在同一小节内移动段落），让文字按现有行距重新回填。不得把行距降到档案规定值以下，不得缩小图，不得把图内或表内字体降到 `figure_interior` / `table_cell` 的字号以下。把行距改回档案规定值是在纠正偏差；为了省出一行而再压低，则不行。
+
+图内文字和表内文字的字号是硬性条件。表内字号由 OOXML 直接判定。图内文字若在 DrawingML 里，字号不符即失败；若只在位图里，OOXML 读不到，必须逐图核对等于 `roles.figure_interior.size_pt` 之后，才可以在审计命令上加 `--figure-fonts-verified`。公式的 MathType 尺寸必须等于 `roles.equation` 的 `mt_*_pt`，核对之后才可以加 `--mathtype-sizes-verified`。这两个开关只证明已经核对过的那一项，不能跳过其他闸门，也不能用来接受更小的字号。
+
+下列模板要求同样是闸门。作者简介照片、定义和定理、篇首的大小写与空格写法不在审查范围内。
+
+- 段末不能只剩一个汉字；正文里参考文献序号、以及数字后面的单位，不能出现在行首。这两项来自 `measure_and_export.ps1` 写出的 `line_breaks`，所以最终审计必须带 `--columns`。
+- 从小数点起每 3 位留 1/4 字空；数字和单位之间留 1/4 字空。列项用 `1）`、`2）`。
+- 图为嵌入型并居中。每条中文图题、表题都要有对应的 `Fig.`、`Tab.`，附录编号写成 `图A1` / `Fig. A1`。
+- 表头里的单位写成分子在上的分数，百分数写成 `φB/%`，列与列用制表位对齐，不用连续空格撑位置。
+- 参考文献编号后空 2 小格；除括号外用全角标点；条目带 GB/T 7714 的类型标志，如 `[J]`、`[M]`、`[D]`、`[R]`、`[C]`、`[S]`、`[N]`、`[EB/OL]`；外文刊名写全称，不用 `Trans.`、`Proc.`、`J.` 这类缩写。
+- 缩写第一次出现写成“中文全称(英文全称，缩写)”。3 个及以上的大写缩写，若所在段没有把它放进括号，审计失败。
+- 页眉必须含档案 `rules.header_must_contain` 里的刊名，字号和居中 8.5 cm、居右 16.8 cm 制表位也要在页眉里。每行字数按页宽核算，允许和 45 字、半栏 21 字差 1 个字。
+- 责任编辑一行里，“编辑”用黑体，姓名用楷体。
+
+变量是否符合 GB 3100～3102、同一符号的大小写和上下标是否全文一致、图中主线和副线是否分开、坐标标目是否与轴平行且标值不过密、录波图是否标出每格数值和单位，这些要从图和符号本身看。逐项核对之后才可以加 `--notation-verified`。这个开关不代替上面任何自动闸门。
+
+## 新模板如何合并
+
+用户给出新的 `.doc` 或 `.docx` 模板时，先运行 `import-template`，再按更新后的档案审计。
+
+合并规则：
+
+- 模板用句子写明的数值，或在对应样本段落上设置的字体、字号、行距、缩进、页面，写入档案并覆盖同名字段。
+- 模板没有出现的角色、没有写明的字段、以及 `layout_policy`，保持导入前的值。不删除，也不改回 Word 默认页边距或默认行距。
+- 合并报告里的 `updated` 是这次改动的字段，`kept` 是继续有效的字段。审计对两边一视同仁，缺一项 `stop.allowed` 就是 false。
+
 ## Overview
 
-This skill provides a complete, reproducible workflow and CLI toolkit for auditing and typesetting academic journal Word (`.docx`) manuscripts (defaulting to *Proceedings of the CSEE* / 《中国电机工程学报》 specifications while supporting custom templates):
-
-1. **Layout & Template Audit**: Verifies page margins (`3.2 cm` top, `2.5 cm` bottom, `2.0 cm` left/right), removes trailing empty single-column sections so the 2-column layout (`0.78 cm` spacing) extends cleanly to the end of the manuscript, checks odd/even running headers, enforces justified hyphenated English `ABSTRACT`, checks three-line tables (numbers and units unified in cells or headers), and verifies strict reading order (`Figure/Table -> Caption -> Interpretation`) without compressing figures or separating captions across columns.
-2. **Pure-Python MathType (`Equation.DSMT4`) Engine**: Scans all plain-text runs (`<w:t>`) for leaked special characters (`±, −, ·, ≤, ≥, ∈, †, ‡`, Greek letters, etc.) and adjacent physical units, compiles `$...$` LaTeX tokens or special-character expressions directly into genuine `Equation.DSMT4` OLE containers + WMF vector previews (without launching MathType's GUI), uniformly scales existing OLE formulas (`1:1` aspect ratio) with exact WMF baseline `<w:position>` offsets, and sets displayed numbered equations to `lineRule="atLeast"` with `3 pt` (`60` twips) before/after spacing.
-3. **Cross-Reference Field Automation (`REF` / `SEQ` + `\* CHARFORMAT`)**: Wraps headings (`1`, `2`, `2.2`, etc.), Chinese table/figure captions, and equation numbers in bookmarks and `SEQ` fields, and replaces hardcoded section/figure/table/equation references with `REF ... \h \* CHARFORMAT` fields so updating fields or exporting PDF never inherits bold caption fonts into body text.
-4. **Academic Prose Tightening & Cliché Audit**: Detects pretentious clichés, redundant negative judgments, and over-defensive disclaimers listed in [academic_prose_checklist.md](./references/academic_prose_checklist.md) while preserving essential physical and model-scope boundaries.
-5. **Word COM Two-Column Alignment & PDF Verification**: Uses [measure_and_export.ps1](./scripts/measure_and_export.ps1) to refresh fields, binary-search column-splitting paragraphs (`SPLIT_Y`), measure per-page Left/Right column top (`L_top, R_top, dT`) and bottom (`L_bot, R_bot, dB`) coordinates, export a verification PDF, and verify `|dT| <= 5.25 pt` and `|dB| <= 5.25 pt` (half a `10.5 pt` character) with zero blank regions and exact page-count parity between Word and PDF.
+1. **Template profile**: `references/csee_profile.json` is the live standard. `import-template` refreshes it and regenerates `references/csee_template_spec.md`.
+2. **Layout audit**: page, document grid, headers, role fonts, line spacing, caption and table fonts, figure-interior font, equation spacing, references, biography, and two-column metrics all have gates.
+3. **MathType**: special characters and adjacent units become `Equation.DSMT4`. Equation paragraph spacing follows `roles.equation` (single spacing on the current CSEE profile). Do not impose a large exact line pitch, and do not squeeze spacing below the profile.
+4. **Cross-references**: `REF` / `SEQ` with `\* CHARFORMAT`.
+5. **Prose**: clichés in [academic_prose_checklist.md](./references/academic_prose_checklist.md). Wording changes are also how column bottoms are filled.
+6. **Word COM**: [measure_and_export.ps1](./scripts/measure_and_export.ps1) writes `col_metrics.json`. Pass that file to `audit --columns`. Single-column pages are not failed for a missing right column. Thresholds come from `layout_policy.column_abs_d_pt` and `column_bottom_min_pt`.
 
 ## Dependencies
 
-- **`uv`**: Required to invoke the Python CLI script via `uv run` in a standard Python 3 environment. The scripts rely strictly on Python 3 standard library modules (`zipfile`, `xml.etree.ElementTree`, `struct`, `ctypes`, `re`, `json`, `zlib`, `base64`).
+- **`uv`**: Python 3 standard library only inside the CLI.
+- **Microsoft Word**: required for `.doc` import and for `measure_and_export.ps1`.
 
 ## Quick Start
 
+Script path: `scripts/journal_docx_cli.py` beside this file. The commands below use the installed copy.
+
 ```powershell
-# 1. Run a full diagnostic audit on a manuscript and write JSON report to disk
-uv run scripts/journal_docx_cli.py audit `
+$cli = "C:\Users\14434\AppData\Local\Cursor\AgentStores\cursor_agent_stores\u452247633\files\skills\journal-docx-formatting-audit\scripts\journal_docx_cli.py"
+$measure = "C:\Users\14434\AppData\Local\Cursor\AgentStores\cursor_agent_stores\u452247633\files\skills\journal-docx-formatting-audit\scripts\measure_and_export.ps1"
+
+# 0. Only when the user supplies a new template. Unspecified fields stay as they are.
+uv run $cli import-template `
+  --input "E:\path\to\new-template.doc" `
+  --report "E:\path\to\merge_report.json"
+
+# 1. Audit. stop.allowed is false until --columns is supplied and every gate passes.
+uv run $cli audit `
   --input "E:\path\to\manuscript.docx" `
   --output "E:\path\to\audit_report.json"
 
-# 2. Convert $...$ tokens / fix MathType OLE aspect ratios, baselines, and equation line spacing
-uv run scripts/journal_docx_cli.py build-mt `
+# 2. MathType size and equation spacing follow the profile.
+uv run $cli build-mt `
   --input "E:\path\to\manuscript.docx" `
   --output "E:\path\to\manuscript_mt.docx" `
   --report "E:\path\to\mt_report.json"
 
-# 3. Convert section, figure, table, and equation references into Word REF/SEQ fields with \* CHARFORMAT
-uv run scripts/journal_docx_cli.py fix-refs `
+# 3. REF/SEQ with \* CHARFORMAT
+uv run $cli fix-refs `
   --input "E:\path\to\manuscript_mt.docx" `
   --output "E:\path\to\manuscript_refs.docx" `
   --report "E:\path\to\ref_report.json"
 
-# 4. Refresh fields, measure per-page two-column coordinates, and export verification PDF via Word COM
-powershell -NoProfile -ExecutionPolicy Bypass -File "scripts/measure_and_export.ps1" `
+# 4. Measure. Read MaxDeltaPt and MinBottomPt from csee_profile.json layout_policy.
+powershell -NoProfile -ExecutionPolicy Bypass -File $measure `
   -DocxPath "E:\path\to\manuscript_refs.docx" `
   -PdfPath "E:\path\to\verification.pdf" `
-  -JsonOutPath "E:\path\to\col_metrics.json"
+  -JsonOutPath "E:\path\to\col_metrics.json" `
+  -MaxDeltaPt 5.25 `
+  -MinBottomPt 745
+
+# 5. Re-audit. Add a verified switch only after the check named in 通过条件.
+uv run $cli audit `
+  --input "E:\path\to\manuscript_refs.docx" `
+  --columns "E:\path\to\col_metrics.json" `
+  --output "E:\path\to\audit_report.json"
 ```
 
 ## Utility Scripts
 
-### 1. [journal_docx_cli.py](./scripts/journal_docx_cli.py)
+### [journal_docx_cli.py](./scripts/journal_docx_cli.py)
 
-Multi-command CLI tool for OOXML inspection, MathType OLE generation/repair, cross-reference injection, and prose auditing. All subcommands require `--output` (or `--report`) and write structured JSON output to files.
+- **`import-template`**: `--input` template (`.doc` or `.docx`), `--profile`, `--spec`, `--report`. Deep-merges a partial patch. Missing template fields are left untouched.
+- **`audit`**: `--input`, `--output`, optional `--profile`, `--columns`, `--figure-fonts-verified`, `--mathtype-sizes-verified`. Writes `gates`, `passed`, and `stop`. `stop.allowed` is the only completion signal.
+- **`build-mt`**: normalizes OLE aspect ratio and baseline. Sets displayed-equation spacing from `roles.equation` instead of a fixed `atLeast` / 3 pt padding.
+- **`fix-refs`**: appends `\* CHARFORMAT` to `REF` fields.
 
-- **`audit`**:
-  - Arguments: `--input <docx_path>` (required), `--output <json_path>` (required), `--template <csee>` (default: `csee`).
-  - Checks: section margins (`pgMar`), column definitions (`cols`) and trailing empty sections, leaked special characters in `<w:t>`, post-OLE plain-text units, non-uniformly scaled or unpositioned MathType OLEs, displayed equation spacing (`atLeast` + `60` twips before/after), missing `\* CHARFORMAT` on `REF` fields, figure/table mention order vs. placement order, and forbidden phrases from [academic_prose_checklist.md](./references/academic_prose_checklist.md).
-- **`build-mt`**:
-  - Arguments: `--input <docx_path>` (required), `--output <docx_path>` (required), `--report <json_path>` (required), `--scale <float>` (default: `0.875`).
-  - Compiles any `$...$` inline LaTeX markers in text runs into genuine `Equation.DSMT4` OLE objects using [mt_builder.py](./scripts/mt_builder.py), normalizes existing MathType OLE aspect ratios and `<w:position>` baseline offsets from WMF metrics, and sets displayed numbered equation paragraphs to `lineRule="atLeast"` with `before="60"` and `after="60"`.
-- **`fix-refs`**:
-  - Arguments: `--input <docx_path>` (required), `--output <docx_path>` (required), `--report <json_path>` (required).
-  - Adds bookmarks and `SEQ` fields to numbered headings and Chinese captions (`表1`..`表N`, `图1`..`图N`), and converts plain-text references (`第1节`, `详见第2节`, `第2.2节`, `图1`, `表1`, `式(1)`) into Word `REF` fields with `\* CHARFORMAT`.
+### [template_profile.py](./scripts/template_profile.py)
 
-### 2. [mt_builder.py](./scripts/mt_builder.py)
+Extract, merge, render the spec, and evaluate gates. `merge_profile` never deletes a leaf the new patch omits.
 
-Pure-Python MathType (`Equation.DSMT4`) generator and WMF inspector:
-- `tex_to_ast(tex)`, `build_wmf(ast, pt, sub_pt, ssub_pt)`, `build_mtef5_bytes(tpl_eq_native, tex, ast)`, `replace_ole_eq_native(tpl_ole, eq_native)`, `inspect_wmf_metrics(wmf_bytes)`, and `get_default_ole_bytes()`.
-- Uses Windows `gdi32` font metrics (`Times New Roman` and `Symbol`) to compute glyph bounding boxes and baseline offsets without opening MathType.
+### [measure_and_export.ps1](./scripts/measure_and_export.ps1)
 
-### 3. [measure_and_export.ps1](./scripts/measure_and_export.ps1)
-
-PowerShell Word COM automation script (must be run with `BypassSandbox: true` when Word COM is blocked inside the sandbox):
-- Acquires a cross-process file lock at `$env:USERPROFILE\.gemini\tmp\word_com.lock` before launching `Word.Application`.
-- Calls `$doc.Fields.Update()`, `$doc.Save()`, and `$doc.Repaginate()`.
-- Computes `SPLIT_Y` via binary search on any paragraph that splits across columns or pages, and writes per-page `L_top, R_top, dT, L_bot, R_bot, dB`, blank-column warnings, and `word_pages` vs. `pdf_pages` to `-JsonOutPath`.
-- If `-TargetDocxPath` is specified and open in a desktop Word window, safely closes the open document handle via `GetActiveObject("Word.Application")` before copying the updated `.docx` into place.
+Word COM, file lock at `$env:USERPROFILE\.gemini\tmp\word_com.lock`. `-MaxDeltaPt` and `-MinBottomPt` default to 5.25 and 745; pass the current profile values after a template import changes `layout_policy`. A page with only one column is not scored. If no two-column page exists, alignment fails.
 
 ## Workflow
 
-1. **Read Specifications & Run Initial Audit**:
-   - Consult [csee_template_spec.md](./references/csee_template_spec.md) and [academic_prose_checklist.md](./references/academic_prose_checklist.md).
-   - Run `journal_docx_cli.py audit` on the user's `.docx` and inspect the JSON report.
-2. **Apply Prose, MathType, and Layout Fixes**:
-   - Keep essential physical boundaries (e.g., constant aerodynamic input + negligible DC-link change for $P_{\mathrm{gap}}\approx -\dot{E}_d$, open-loop assumptions before exponential recovery time estimate, model scope in a dedicated section) while removing repetitive negative judgments and pretentious clichés (`揭示了`, `直接印证`, `刚性前置约束`, `清晰解耦`, `精确刻画`, `显著...`, `更为关键的是`, `综合上述`, `可以看出/可以看到`, `源—网—储`).
-   - Ensure all special characters and adjacent units are enclosed in MathType (`$...$` tokens compiled via `mt_builder.py` / `build-mt`), and put numbers + units together in Table 1 value cells (or headers) consistently.
-   - Ensure strict reading order (`Figure/Table -> Caption -> Interpretation`) and keep captions attached to their figures/tables in the same column (`keepNext`).
-   - Run `build-mt` and `fix-refs` to normalize all MathType OLEs, displayed equation spacing (`atLeast`, `3 pt` before/after), and `REF ... \* CHARFORMAT` cross-references.
-3. **Measure Two-Column Alignment & Eliminate Blank Regions**:
-   - Run `measure_and_export.ps1` (`BypassSandbox: true`) and read the resulting `col_metrics.json`.
-   - If a tall figure jumps to the next column leaving a blank region (`L_bot` or `R_bot < 745 pt`), move the paragraph immediately following the figure before the figure (within the same subsection, preserving `Figure -> Caption -> Interpretation` order) so the text fills the column bottom.
-   - If `|dB| > 5.25 pt` on any page (`41` vs `42` lines due to `atLeast` equation heights), add `40–220` twips (`2–11 pt`) of `before`/`after` spacing to a heading, displayed equation, or caption inside the shorter column so `L_bot` and `R_bot` align within `<= 5.25 pt` without triggering a line wrap.
-   - Visually inspect the exported verification `.pdf` using `read_file` to confirm `word_pages == pdf_pages`, zero blank areas, and clean typography.
+1. If the user supplied a new template, run `import-template` and read `updated` and `kept`. Do not loosen a kept field.
+2. Read [csee_template_spec.md](./references/csee_template_spec.md) and [academic_prose_checklist.md](./references/academic_prose_checklist.md). Run `audit`.
+3. Repair only failed gates. Keep physical and model boundaries while removing clichés. Put numbers and units in the same table cell or in the header. Keep `Figure/Table -> Caption -> Interpretation` and `keepNext` where the profile requires it.
+4. Run `build-mt` and `fix-refs`.
+5. Run `measure_and_export.ps1`, then `audit --columns`. If a column is short, rewrite or move prose in that column. Do not compress line spacing, figures, or chart fonts.
+6. Inspect the PDF. Stop only when `stop.allowed` is true.
 
-## Concurrency & Rate Limiting
+## Concurrency
 
-- Local `Word.Application` COM calls are serialized via the lock file `$env:USERPROFILE\.gemini\tmp\word_com.lock` (timeout `120 s`, poll interval `1 s`). Never run multiple `measure_and_export.ps1` instances in parallel without the lock.
+Word COM calls share `$env:USERPROFILE\.gemini\tmp\word_com.lock` (120 s, poll 1 s). Do not run `import-template` on a `.doc` and `measure_and_export.ps1` at the same time.
 
 ## Common Mistakes
 
-1. **Omitting `\* CHARFORMAT` on `REF` fields**: Without `\* CHARFORMAT`, Word's `ExportAsFixedFormat` copies the `9 pt` bold `黑体` font from Chinese figure/table captions into body-text cross-references (`图4`, `表1`), altering line widths during PDF export and causing 1-line page overflows on the final page. Always include `\* CHARFORMAT` and run `$doc.Fields.Update()` before measuring coordinates.
-2. **Leaving a trailing single-column Section 3**: Do not append an empty continuous single-column section break after `作者简介`. End `<w:body>` directly with the 2-column `<w:sectPr>` (`num="2"`, `space="442"`) and calibrate the final page's `参考文献` / `作者简介` spacing so both columns reach the bottom margin (`~751–754 pt`).
-3. **Fixed `32.3 pt` line spacing on displayed equations**: Do not use `line="646" lineRule="exact"` on single-line displayed equations (`~17 pt` tall), which creates excessive vertical whitespace. Use `lineRule="atLeast"` with `before="60"` (`3 pt`) and `after="60"` (`3 pt`), and absorb sub-grid remainders via in-column `before`/`after` padding.
+1. **Stopping on a partial audit.** A report with `stop.allowed: false` is not a pass, including when the only pending gate is `columns` because `--columns` was omitted.
+2. **Treating an omitted template field as permission to drop it.** Import leaves that field at its previous value, and the audit still enforces it.
+3. **Compressing type or artwork to fix the columns.** Change the wording. Figure interior type stays at `figure_interior.size_pt` (currently 7.5 pt). Table type stays at `table_cell.size_pt` (currently 7.5 pt) with its exact line spacing.
+4. **Omitting `\* CHARFORMAT`.** Caption bold then leaks into body cross-references and changes line breaks.
+5. **A trailing single-column section after 作者简介.** The last `sectPr` stays the two-column section.
+6. **A large exact line pitch on displayed equations.** Follow `roles.equation`. The current profile uses single spacing, not `line="646" lineRule="exact"`, and not a tighter pitch than that profile.

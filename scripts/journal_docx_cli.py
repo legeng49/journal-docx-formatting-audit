@@ -10,6 +10,7 @@ import xml.etree.ElementTree as ET
 import zipfile
 
 import mt_builder as mb
+import template_profile as tp
 
 
 def open_docx_bytes(path):
@@ -173,19 +174,9 @@ def cmd_audit(args):
                     if not any(x[0] == fnum for x in fig_mentions):
                         fig_mentions.append((fnum, p_idx))
 
-            # Displayed equations check
             full_instr = " ".join(instrs)
             if "SEQ" in full_instr and "公式" in full_instr:
                 report["displayed_equations"]["total"] += 1
-                pPr = ch.find(f"{W}pPr")
-                sp = pPr.find(f"{W}spacing") if pPr is not None else None
-                lr = sp.get(f"{W}lineRule") if sp is not None else None
-                bf = sp.get(f"{W}before") if sp is not None else None
-                af = sp.get(f"{W}after") if sp is not None else None
-                if lr != "atLeast":
-                    report["displayed_equations"]["non_atLeast_or_bad_padding"].append(
-                        {"p_index": p_idx, "lineRule": lr, "before": bf, "after": af}
-                    )
 
             # Inspect runs for leaked special chars, OLE objects, and post-OLE plain-text units
             runs = ch.findall(f".//{W}r")
@@ -217,16 +208,39 @@ def cmd_audit(args):
         if cap_nums != sorted(cap_nums):
             report["figure_order"]["out_of_order"] = True
 
-    if (
-        report["trailing_empty_single_col_section"]
-        or report["leaked_special_chars"]
-        or report["forbidden_phrases"]
-        or report["cross_references"]["hardcoded_section_refs"]
-        or report["cross_references"]["missing_charformat"]
-        or report["displayed_equations"]["non_atLeast_or_bad_padding"]
-        or report["figure_order"]["out_of_order"]
-    ):
-        report["passed"] = False
+        profile = tp.load_profile(args.profile)
+        layout = tp.evaluate(
+            zin,
+            profile,
+            columns_path=args.columns,
+            figure_fonts_verified=args.figure_fonts_verified,
+            mathtype_sizes_verified=args.mathtype_sizes_verified,
+            notation_verified=args.notation_verified,
+        )
+        report["profile"] = os.path.abspath(args.profile)
+        report["gates"] = layout["gates"]
+        report["layout_violations"] = layout["violations"]
+        report["layout_violation_count"] = layout["violation_count"]
+        report["layout_policy"] = layout["layout_policy"]
+
+    legacy = {
+        "trailing_section": not report["trailing_empty_single_col_section"],
+        "special_chars": not report["leaked_special_chars"] and not report["post_ole_plain_units"],
+        "ole": report["ole_diagnostics"]["non_dsmt4"] == 0 and report["ole_diagnostics"]["unpositioned_oles"] == 0,
+        "cross_references": not report["cross_references"]["hardcoded_section_refs"] and not report["cross_references"]["missing_charformat"],
+        "figure_order": not report["figure_order"]["out_of_order"],
+        "prose": not report["forbidden_phrases"],
+    }
+    report.setdefault("gates", {})
+    for name, ok in legacy.items():
+        report["gates"][name] = {"passed": ok, "count": 0 if ok else 1}
+    pending = [name for name, gate in report["gates"].items() if not gate["passed"]]
+    report["passed"] = not pending
+    report["stop"] = {
+        "allowed": not pending,
+        "pending_gates": pending,
+        "rule": "全部闸门通过后才可以停止。模板未改写的规定仍然有效。栏面不足时改表述，不压行距、不缩图、不缩小图表字体。",
+    }
 
     os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
     with open(args.output, "w", encoding="utf-8") as f:
@@ -280,7 +294,24 @@ def cmd_build_mt(args):
         print(f"Error: Input file not found: {args.input}", file=sys.stderr)
         sys.exit(1)
 
-    stats = {"normalized_oles": 0, "displayed_eqs_updated": 0}
+    profile = tp.load_profile(getattr(args, "profile", None))
+    eq = profile.get("roles", {}).get("equation", {})
+    stats = {
+        "normalized_oles": 0,
+        "displayed_eqs_updated": 0,
+        "equation_spacing": {
+            "line": eq.get("line", "single"),
+            "before_twips": eq.get("before_twips", 0),
+            "after_twips": eq.get("after_twips", 0),
+        },
+        "required_mathtype_pt": {
+            "full": eq.get("mt_full_pt"),
+            "sub": eq.get("mt_sub_pt"),
+            "ssub": eq.get("mt_ssub_pt"),
+            "symbol": eq.get("mt_symbol_pt"),
+            "subsymbol": eq.get("mt_subsymbol_pt"),
+        },
+    }
     with zipfile.ZipFile(open_docx_bytes(args.input), "r") as zin:
         doc = ET.fromstring(zin.read("word/document.xml"))
         rels_xml = zin.read("word/_rels/document.xml.rels").decode("utf-8")
@@ -307,13 +338,20 @@ def cmd_build_mt(args):
                 if sp is None:
                     sp = el(f"{W}spacing")
                     pPr.append(sp)
-                min_twips = int(round(max(h_scaled, 17.5) * 20))
-                if sp.get(f"{W}before") is None:
-                    sp.set(f"{W}before", "60")
-                if sp.get(f"{W}after") is None:
-                    sp.set(f"{W}after", "60")
-                sp.set(f"{W}line", str(min_twips))
-                sp.set(f"{W}lineRule", "atLeast")
+                if eq.get("line") == "atLeast":
+                    min_twips = int(round(max(h_scaled, 17.5) * 20))
+                    sp.set(f"{W}line", str(min_twips))
+                    sp.set(f"{W}lineRule", "atLeast")
+                elif eq.get("line_exact_pt"):
+                    sp.set(f"{W}line", str(int(round(float(eq["line_exact_pt"]) * 20))))
+                    sp.set(f"{W}lineRule", "exact")
+                else:
+                    sp.set(f"{W}line", "240")
+                    sp.set(f"{W}lineRule", "auto")
+                before = eq.get("before_twips", 0 if "before_pt" not in eq else int(round(float(eq["before_pt"]) * 20)))
+                after = eq.get("after_twips", 0 if "after_pt" not in eq else int(round(float(eq["after_pt"]) * 20)))
+                sp.set(f"{W}before", str(int(before)))
+                sp.set(f"{W}after", str(int(after)))
                 stats["displayed_eqs_updated"] += 1
 
         new_doc_xml = ET.tostring(doc, encoding="utf-8", xml_declaration=True)
@@ -329,6 +367,20 @@ def cmd_build_mt(args):
     with open(args.report, "w", encoding="utf-8") as f:
         json.dump(stats, f, ensure_ascii=False, indent=2)
     print(f"Success! MathType normalization written to: {args.output}, report: {args.report}")
+
+
+def cmd_import_template(args):
+    if not os.path.exists(args.input):
+        print(f"Error: Input file not found: {args.input}", file=sys.stderr)
+        sys.exit(1)
+    report = tp.import_template(args.input, args.profile, args.spec)
+    os.makedirs(os.path.dirname(os.path.abspath(args.report)), exist_ok=True)
+    with open(args.report, "w", encoding="utf-8") as f:
+        json.dump(report, f, ensure_ascii=False, indent=2)
+    print(
+        f"Success! Profile updated: {report['updated'].__len__()} fields from the template, "
+        f"{report['kept_count']} fields kept. Report: {args.report}"
+    )
 
 
 def cmd_fix_refs(args):
@@ -365,15 +417,28 @@ def main():
 
     p_audit = sub.add_parser("audit", help="Run full layout, MathType, cross-reference, and prose audit")
     p_audit.add_argument("--input", required=True, help="Input .docx path")
-    p_audit.add_argument("--template", default="csee", help="Template profile (default: csee)")
+    p_audit.add_argument("--template", default="csee", help="Template profile name (default: csee)")
+    p_audit.add_argument("--profile", default=tp.DEFAULT_PROFILE, help="Active profile JSON")
+    p_audit.add_argument("--columns", default=None, help="col_metrics.json from measure_and_export.ps1")
     p_audit.add_argument("--output", required=True, help="Output JSON report path")
+    p_audit.add_argument("--figure-fonts-verified", action="store_true", help="Set only after every raster figure's interior type is the profile figure_interior size")
+    p_audit.add_argument("--mathtype-sizes-verified", action="store_true", help="Set only after MathType sizes match roles.equation mt_*_pt")
+    p_audit.add_argument("--notation-verified", action="store_true", help="Set only after GB 3100, figure line weight, axis labels, and oscillograph grid labels have been checked")
     p_audit.set_defaults(func=cmd_audit)
+
+    p_imp = sub.add_parser("import-template", help="Merge a .doc/.docx template into the profile; unspecified fields stay unchanged")
+    p_imp.add_argument("--input", required=True, help="New template .doc or .docx")
+    p_imp.add_argument("--profile", default=tp.DEFAULT_PROFILE, help="Profile JSON to update in place")
+    p_imp.add_argument("--spec", default=tp.DEFAULT_SPEC, help="Generated spec markdown")
+    p_imp.add_argument("--report", required=True, help="Merge report JSON")
+    p_imp.set_defaults(func=cmd_import_template)
 
     p_mt = sub.add_parser("build-mt", help="Normalize MathType OLE baselines, aspect ratios, and equation line spacing")
     p_mt.add_argument("--input", required=True, help="Input .docx path")
     p_mt.add_argument("--output", required=True, help="Output .docx path")
     p_mt.add_argument("--report", required=True, help="Output JSON report path")
     p_mt.add_argument("--scale", type=float, default=0.875, help="Uniform scale factor for OLE formulas")
+    p_mt.add_argument("--profile", default=tp.DEFAULT_PROFILE, help="Active profile JSON")
     p_mt.set_defaults(func=cmd_build_mt)
 
     p_refs = sub.add_parser("fix-refs", help="Ensure all REF fields include \\* CHARFORMAT")

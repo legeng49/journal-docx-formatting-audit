@@ -1,18 +1,21 @@
 # journal-docx-formatting-audit
 
-中文与 SCI 期刊 Word 稿的格式审查、MathType 公式、交叉引用、文风收紧和双栏对齐工具。默认对照《中国电机工程学报》模板，也可以换用自定义模板。
+中文与 SCI 期刊 Word 稿的格式审查、MathType 公式、交叉引用、文风收紧和双栏对齐工具。默认对照《中国电机工程学报》模板。数值以 `references/csee_profile.json` 为准。
 
-在仓库根目录运行命令。示例里的稿件路径请换成自己的文件。
+上传新的 `.doc` 或 `.docx` 模板时，只覆盖模板里写明或在样本上设置过的字段。模板没有的字段保持原值，不退回 Word 默认值，也不从档案中删除。
+
+栏底不齐时改写表述，不压低行距，不缩小图，不把图内或表内字体降到档案规定的字号以下。`audit` 报告里的 `stop.allowed` 为 true 之前，不算通过。
 
 ## 功能
 
-1. **版式审查。** 检查 A4 页边距（上 3.2 cm、下 2.5 cm、左右 2.0 cm）、自英文摘要起的双栏（栏距 0.78 cm）、页眉、英文摘要断词、三线表，以及“图/表、题注、解释”的阅读顺序。文末不留空的单栏节。
-2. **MathType 公式。** 把正文里的特殊字符、相邻物理单位和 `$...$` 公式写成 `Equation.DSMT4` 对象，不打开 MathType 窗口。行内公式按 1:1 对齐基线；单独成行的编号公式使用“至少”行距，段前段后 3 pt，公式居中、编号在行末。
-3. **交叉引用。** 标题、图题、表题和公式编号使用 `SEQ` 与书签。正文里的“第1节”“图1”“表1”“式(1)”改成带 `\* CHARFORMAT` 的 `REF` 域，避免题注的粗体被带进正文。
-4. **文风。** 按 `references/academic_prose_checklist.md` 标出拿腔用词和重复的否定句。气动近似、必要下界、开环前提和模型适用范围予以保留。
-5. **双栏对齐。** 用 Word 测量每页左右栏的顶部和底部。允许误差不超过 5.25 pt（半个 10.5 pt 字符）。导出 PDF 后核对页数，不留空白页和栏底大块空白。
+1. **模板合并。** `import-template` 读取新模板，写出合并报告里的 `updated` 和 `kept`。
+2. **版式审查。** 页面、文档网格、页眉刊名与制表位、角色字体和行距、图表字号、嵌入型居中的图、中英文题成对、参考文献著录、段末单字和行首禁排。图内字号、MathType 尺寸，以及 GB 3100、主副线、坐标标目、录波格值，需要核对后再打开对应开关。
+3. **MathType 公式。** 特殊字符和相邻单位进入 `Equation.DSMT4`。编号公式的行距按档案里的 `roles.equation`，当前模板是单倍行距。
+4. **交叉引用。** `REF` 域带 `\* CHARFORMAT`。
+5. **文风。** 按 `references/academic_prose_checklist.md` 收紧套话。版面不够时同样用改写解决。
+6. **双栏对齐。** Word 测量左右栏顶底。允许误差和栏底下限在 `layout_policy` 里，默认 5.25 pt 和 745 pt。单栏页不按缺右栏判失败。
 
-模板数值见 `references/csee_template_spec.md`。
+规格说明由档案生成，见 `references/csee_template_spec.md`。
 
 ## 环境
 
@@ -21,7 +24,7 @@
 - [uv](https://docs.astral.sh/uv/)
 - 脚本只用 Python 标准库，不需要安装 MathType 图形界面
 
-双栏测量会启动 Word。同一时间只运行一个测量脚本；脚本用 `%USERPROFILE%\.gemini\tmp\word_com.lock` 串行加锁。
+`.doc` 导入和双栏测量都会启动 Word。同一时间只运行一个 Word 脚本；脚本用 `%USERPROFILE%\.gemini\tmp\word_com.lock` 串行加锁。
 
 ## 安装
 
@@ -34,35 +37,28 @@ cd journal-docx-formatting-audit
 
 ### Cursor
 
-装到当前项目，只对该仓库生效：
-
-```powershell
-New-Item -ItemType Directory -Force -Path .cursor\skills | Out-Null
-Copy-Item -Recurse -Force .\journal-docx-formatting-audit .cursor\skills\journal-docx-formatting-audit
-```
-
-如果仓库就是本 skill，则把它放到：
+个人技能放在用户 Agent Store 的 `skills/journal-docx-formatting-audit/`。当前这台机器的目录是：
 
 ```text
-.cursor/skills/journal-docx-formatting-audit/
+%LOCALAPPDATA%\Cursor\AgentStores\cursor_agent_stores\u452247633\files\skills\journal-docx-formatting-audit
 ```
 
-目录里需要有 `SKILL.md`、`references/` 和 `scripts/`。
-
-装到本机、所有项目可用：把整个目录复制到 Cursor 的个人 skills 目录，文件夹名保持 `journal-docx-formatting-audit`。Cursor 个人技能写在用户 Agent Store 的 `skills/` 下；若当前环境没有 Agent Store，则放到：
+若当前环境没有 Agent Store，则放到：
 
 ```text
 %USERPROFILE%\.cursor\skills\journal-docx-formatting-audit\
 ```
 
-不要放到 `%USERPROFILE%\.cursor\skills-cursor\`。那是 Cursor 自带技能的目录。
+不要放到 `%USERPROFILE%\.cursor\skills-cursor\`。
+
+只对某一个项目生效时，复制到该项目的 `.cursor/skills/journal-docx-formatting-audit/`。目录里需要有 `SKILL.md`、`references/` 和 `scripts/`。
 
 ### Gemini
 
 ```powershell
 $dest = Join-Path $env:USERPROFILE ".gemini\config\skills\journal-docx-formatting-audit"
-New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
-Copy-Item -Recurse -Force .\journal-docx-formatting-audit $dest
+New-Item -ItemType Directory -Force -Path $dest | Out-Null
+Copy-Item -Recurse -Force .\* $dest
 ```
 
 安装后新开一次对话，让代理读取该 skill 的 `SKILL.md`。
@@ -72,6 +68,10 @@ Copy-Item -Recurse -Force .\journal-docx-formatting-audit $dest
 在 skill 根目录依次执行：
 
 ```powershell
+uv run scripts/journal_docx_cli.py import-template `
+  --input "E:\path\to\new-template.doc" `
+  --report "E:\path\to\merge_report.json"
+
 uv run scripts/journal_docx_cli.py audit `
   --input "E:\path\to\manuscript.docx" `
   --output "E:\path\to\audit_report.json"
@@ -90,17 +90,24 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "scripts/measure_and_export.
   -DocxPath "E:\path\to\manuscript_refs.docx" `
   -PdfPath "E:\path\to\verification.pdf" `
   -JsonOutPath "E:\path\to\col_metrics.json"
+
+uv run scripts/journal_docx_cli.py audit `
+  --input "E:\path\to\manuscript_refs.docx" `
+  --columns "E:\path\to\col_metrics.json" `
+  --output "E:\path\to\audit_report.json"
 ```
 
-`audit` 只读稿件并写出 JSON。`build-mt` 和 `fix-refs` 写出新的 docx，不覆盖 `--input`。测量脚本会打开 Word、更新域并导出 PDF。左右栏底部差大于 5.25 pt，或栏底高于约 745 pt 的留白，按 `SKILL.md` 里的间距和段落顺序调整后再测一次。
+`audit` 只读稿件并写出 JSON。`build-mt` 和 `fix-refs` 写出新的 docx，不覆盖 `--input`。`--figure-fonts-verified`、`--mathtype-sizes-verified` 和 `--notation-verified` 只在 `SKILL.md` 写明的核对完成之后使用，不能用来跳过其他闸门。
 
 ## 文件
 
 | 路径 | 作用 |
 | --- | --- |
-| `SKILL.md` | 代理执行时的完整步骤 |
-| `references/csee_template_spec.md` | 学报页面、字体、公式和图表规格 |
+| `SKILL.md` | 代理执行时的完整步骤和停止条件 |
+| `references/csee_profile.json` | 当前模板档案；导入时按字段合并 |
+| `references/csee_template_spec.md` | 由档案生成的规格说明 |
 | `references/academic_prose_checklist.md` | 需要收紧的套话，以及必须保留的物理边界 |
-| `scripts/journal_docx_cli.py` | 审查、生成 MathType、写入交叉引用 |
+| `scripts/journal_docx_cli.py` | 导入模板、审查、MathType、交叉引用 |
+| `scripts/template_profile.py` | 模板字段提取、合并和闸门判定 |
 | `scripts/mt_builder.py` | 不打开 MathType 界面，直接生成公式对象 |
-| `scripts/measure_and_export.ps1` | 测量双栏坐标并导出核对用 PDF |
+| `scripts/measure_and_export.ps1` | 测量双栏、段末单字和行首禁排，并导出 PDF |
