@@ -8,12 +8,13 @@
 
 ## 功能
 
-1. **模板合并。** `import-template` 读取新模板，写出合并报告里的 `updated` 和 `kept`。
+1. **模板合并。** `import-template` 读取新模板，写出合并报告里的 `updated` 和 `kept`。同一结果只改 `latex/assets/template/csee-report.cls` 里对应的页边距、栏距、行距、公式尺寸和刊名；类文件其余部分保持不动。
 2. **版式审查。** 页面、文档网格、页眉刊名与制表位、角色字体和行距、图表字号、嵌入型居中的图、中英文题成对、参考文献著录、段末单字和行首禁排。图内字号、MathType 尺寸，以及 GB 3100、主副线、坐标标目、录波格值，需要核对后再打开对应开关。
 3. **MathType 公式。** 特殊字符和相邻单位进入 `Equation.DSMT4`。编号公式的行距按档案里的 `roles.equation`，当前模板是单倍行距。
 4. **交叉引用。** `REF` 域带 `\* CHARFORMAT`。
 5. **文风。** 按 `references/academic_prose_checklist.md` 收紧套话。版面不够时同样用改写解决。
 6. **双栏对齐。** Word 测量左右栏顶底。允许误差和栏底下限在 `layout_policy` 里，默认 5.25 pt 和 745 pt。单栏页不按缺右栏判失败。
+7. **LaTeX 课程报告。** `latex/` 用 XeLaTeX 写机报正文。`python latex/scripts/new_report.py <报告文件夹>` 新建，`python latex/scripts/build.py <报告文件夹>` 编译。要求交 Word 时用 `python latex/scripts/to_word.py <报告文件夹> --pdf`。写法见 `latex/references/format.md`。
 
 规格说明由档案生成，见 `references/csee_template_spec.md`。
 
@@ -111,3 +112,4 @@ uv run scripts/journal_docx_cli.py audit `
 | `scripts/template_profile.py` | 模板字段提取、合并和闸门判定 |
 | `scripts/mt_builder.py` | 不打开 MathType 界面，直接生成公式对象 |
 | `scripts/measure_and_export.ps1` | 测量双栏、段末单字和行首禁排，并导出 PDF |
+| `latex/` | XeLaTeX 课程报告：类文件、GB/T 7714 样式、新建、编译和转 Word |

@@ -708,6 +708,78 @@ try {
     return out
 
 
+def _cm_tex(twips):
+    cm = float(twips) / 1440 * 2.54
+    if abs(cm - round(cm)) < 0.051:
+        return f"{int(round(cm))}cm"
+    if abs(cm * 10 - round(cm * 10)) < 0.051:
+        return f"{cm:.1f}cm"
+    return f"{cm:.2f}cm"
+
+
+def _math_bp(pt):
+    if abs(float(pt) - 6.5) < 0.05:
+        return "6.52"
+    if abs(float(pt) - 4.5) < 0.05:
+        return "4.52"
+    return f"{float(pt):.2f}".rstrip("0").rstrip(".")
+
+
+def sync_latex_from_profile(profile, latex_root=None):
+    """Rewrite only the cls settings the profile currently defines.
+
+    A new template that does not mention a setting leaves that profile field,
+    and therefore this cls line, unchanged.
+    """
+    root = latex_root or os.path.join(SKILL_ROOT, "latex")
+    cls_path = os.path.join(root, "assets", "template", "csee-report.cls")
+    if not os.path.exists(cls_path):
+        return {"cls": None, "updated": []}
+    with open(cls_path, encoding="utf-8") as f:
+        text = f.read()
+    page = profile.get("page", {})
+    roles = profile.get("roles", {})
+    rules = profile.get("rules", {})
+    updated = []
+
+    def sub(pattern, repl, label):
+        nonlocal text
+        new, n = re.subn(pattern, lambda _m, repl=repl: repl, text, count=1)
+        if n and new != text:
+            text = new
+            updated.append(label)
+
+    if all(k in page for k in ("top", "bottom", "left", "right")):
+        geom = "top=%s,bottom=%s,left=%s,right=%s" % (
+            _cm_tex(page["top"]), _cm_tex(page["bottom"]), _cm_tex(page["left"]), _cm_tex(page["right"]))
+        sub(r"top=[0-9.]+cm,bottom=[0-9.]+cm,left=[0-9.]+cm,right=[0-9.]+cm", geom, "page-margins")
+    if "col_space" in page:
+        sub(r"columnsep=[0-9.]+cm", "columnsep=" + _cm_tex(page["col_space"]), "column-sep")
+    if page.get("line_pitch_twips"):
+        pitch = float(page["line_pitch_twips"])
+        spread = "1.2857" if abs(pitch - 324) < 1 else f"{(pitch / 20) / 12.65:.4f}"
+        sub(r"linespread=[0-9.]+", "linespread=" + spread, "linespread")
+    eq = roles.get("equation", {})
+    if "mt_sub_pt" in eq and "mt_ssub_pt" in eq:
+        sub(
+            r"\\DeclareMathSizes\{\\csee@normalfsize\}\{\\csee@normalfsize\}\{[0-9.]+\}\{[0-9.]+\}",
+            r"\DeclareMathSizes{\csee@normalfsize}{\csee@normalfsize}{%s}{%s}" % (
+                _math_bp(eq["mt_sub_pt"]), _math_bp(eq["mt_ssub_pt"])),
+            "math-sizes",
+        )
+    names = rules.get("header_must_contain") or []
+    for name in names:
+        if re.search(r"[\u4e00-\u9fff]", name):
+            spaced = r"\quad ".join(ch for ch in name if not ch.isspace())
+            sub(r"\\def\\csee@journalcn\{[^}]*\}", r"\def\csee@journalcn{%s}" % spaced, "journal-cn")
+        elif re.search(r"[A-Za-z]", name) and "Proceedings" in name or " " in name:
+            sub(r"\\def\\csee@journalen\{[^}]*\}", r"\def\csee@journalen{%s}" % name, "journal-en")
+    if updated:
+        with open(cls_path, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text)
+    return {"cls": cls_path, "updated": updated}
+
+
 def import_template(template_path, profile_path=None, spec_path=None):
     profile_path = profile_path or DEFAULT_PROFILE
     spec_path = spec_path or DEFAULT_SPEC
@@ -727,6 +799,7 @@ def import_template(template_path, profile_path=None, spec_path=None):
     merged["meta"]["last_template"] = os.path.abspath(template_path)
     merged["meta"]["updated_keys"] = updated
     save_profile(merged, profile_path)
+    latex_sync = sync_latex_from_profile(merged)
     spec = render_spec(merged)
     os.makedirs(os.path.dirname(os.path.abspath(spec_path)), exist_ok=True)
     with open(spec_path, "w", encoding="utf-8") as f:
@@ -738,7 +811,9 @@ def import_template(template_path, profile_path=None, spec_path=None):
         "updated": updated,
         "kept_count": len(kept),
         "kept": kept,
-        "rule": "模板里能确定的字段已覆盖；模板没有给出的字段保持导入前的值。",
+        "latex_cls": latex_sync["cls"],
+        "latex_updated": latex_sync["updated"],
+        "rule": "模板里能确定的字段已覆盖；模板没有给出的字段保持导入前的值。LaTeX 类文件只改这些字段对应的页边距、栏距、行距、公式尺寸和刊名，其余命令保持不动。",
     }
     return report
 
