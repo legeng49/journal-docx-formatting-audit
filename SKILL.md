@@ -133,7 +133,9 @@ Word COM, file lock at `$env:USERPROFILE\.gemini\tmp\word_com.lock`. `-MaxDeltaP
 - 某一式和它相邻的式各自都有独立引用时，这两式必须分成两个框，各编一个号。
 - 例：连续 5 式，后文要把正中间的两式（第 2 式和第 3 式）作为单独的引用目标，而且这两式本身不再彼此拆开。分组大小是 1、2、2：第 1 式是 1×1，第 2–3 式是一个 2×1 矩阵，第 4–5 式是另一个 2×1 矩阵，共三个公式框、三个编号。若第 2 式和第 3 式各自还有独立引用，则中间这两式再拆成两个 1×1 框。
 
-变量用斜体，单位、数字和文字型下标用正体。单位和普通标量不加粗；加粗只用于矢量或矩阵。
+变量用斜体，单位、数字和文字型下标用正体。数字、单位、标点和普通标量一律不加粗；MathType 的 Function 样式如果是粗体，改成正体、非粗体。加粗只用于矢量或矩阵。
+
+正文里的 MathType 公式主字号必须和正文字号一致，当前是 10.5 pt。同一篇正文不得混用 12 pt、7.5 pt、18 pt。表内公式跟表内字号（7.5 pt），摘要和题注里的公式跟 9 pt。数字即使跟在粗体符号旁边也不加粗。
 
 ## 行内公式必须完整
 
@@ -177,3 +179,4 @@ Word COM calls share `$env:USERPROFILE\.gemini\tmp\word_com.lock` (120 s, poll 1
 6. **A large exact line pitch on displayed equations.** Follow `roles.equation`. The current profile uses single spacing, not `line="646" lineRule="exact"`, and not a tighter pitch than that profile.
 7. **Leaving a merged display as two objects or a Word line break.** Formulas that share one number belong in one MathType object laid out as a k×1 matrix: 2 formulas are 2×1, 3 are 3×1, and so on. No matrix fences, no extra tabs.
 8. **Splitting one inline expression across objects.** A complete expression, including `min{...}` through its closing brace, stays in one MathType object. Bare `5s` or `1MJ`, and a percent sign separated from its number, are not acceptable.
+9. **Mixing bold and size in body formulas.** Body MathType uses one size, the body size (10.5 pt). Numbers, units, and punctuation are not bold. Do not leave some equations at 12 pt or 7.5 pt in body text, and do not bold digits.
