@@ -86,6 +86,10 @@ FORBIDDEN_PHRASES = [
     "研究表明，转速恢复整定应在满足回补期限的前提下统筹",
 ]
 UNIT_HEAD_RE = re.compile(r"^\s*(MW|kW|GW|MWh|kWh|MJ|kJ|Hz|mHz|s|ms|pu|rad/s)\b")
+UNIT_NUMBER_RE = re.compile(
+    r"(?<![\d.])\d+(?:[ \u00a0\u2005\u2009]\d{3})*(?:\.\d+)?[ \u00a0\u2005\u2009]?"
+    r"(?:MWh|kWh|MW|kW|GW|mHz|kHz|Hz|kV|kA|mm|cm|km|ms|pu|rad/s|dB|℃|°C|%)"
+)
 
 
 def el(tag, attrib=None, children=None, text=None):
@@ -112,6 +116,8 @@ def cmd_audit(args):
         "trailing_empty_single_col_section": False,
         "leaked_special_chars": [],
         "post_ole_plain_units": [],
+        "plain_unit_numbers": [],
+        "formula_size_mismatch": [],
         "ole_diagnostics": {"total_oles": 0, "non_dsmt4": 0, "unpositioned_oles": 0},
         "displayed_equations": {"total": 0, "non_atLeast_or_bad_padding": []},
         "cross_references": {"total_ref_fields": 0, "missing_charformat": [], "hardcoded_section_refs": []},
@@ -122,6 +128,10 @@ def cmd_audit(args):
 
     with zipfile.ZipFile(open_docx_bytes(args.input), "r") as zin:
         doc = ET.fromstring(zin.read("word/document.xml"))
+        rid_to_target = {}
+        if "word/_rels/document.xml.rels" in zin.namelist():
+            rels_root = ET.fromstring(zin.read("word/_rels/document.xml.rels"))
+            rid_to_target = {e.attrib.get("Id"): e.attrib.get("Target") for e in rels_root if e.attrib.get("Id")}
         body = doc.find(f"{W}body")
         children = list(body)
 
@@ -200,7 +210,20 @@ def cmd_audit(args):
                             report["leaked_special_chars"].append({"p_index": p_idx, "chars": "".join(set(bad)), "text": txt})
                         if prev_was_ole and UNIT_HEAD_RE.match(txt):
                             report["post_ole_plain_units"].append({"p_index": p_idx, "text": txt[:20]})
+                        if UNIT_NUMBER_RE.search(txt):
+                            report["plain_unit_numbers"].append({"p_index": p_idx, "text": txt[:40]})
                         prev_was_ole = False
+                    else:
+                        prev_was_ole = False
+                if oo is not None:
+                    ctx = _context_font_pt(ch)
+                    full = _ole_full_pt(r_el, zin, rid_to_target)
+                    if ctx and full and abs(full - ctx) > 0.75:
+                        report["formula_size_mismatch"].append({
+                            "p_index": p_idx,
+                            "context_pt": ctx,
+                            "formula_pt": round(full, 2),
+                        })
 
         report["figure_order"]["mentions"] = fig_mentions
         report["figure_order"]["captions"] = fig_captions
@@ -225,7 +248,12 @@ def cmd_audit(args):
 
     legacy = {
         "trailing_section": not report["trailing_empty_single_col_section"],
-        "special_chars": not report["leaked_special_chars"] and not report["post_ole_plain_units"],
+        "special_chars": (
+            not report["leaked_special_chars"]
+            and not report["post_ole_plain_units"]
+            and not report["plain_unit_numbers"]
+            and not report["formula_size_mismatch"]
+        ),
         "ole": report["ole_diagnostics"]["non_dsmt4"] == 0 and report["ole_diagnostics"]["unpositioned_oles"] == 0,
         "cross_references": not report["cross_references"]["hardcoded_section_refs"] and not report["cross_references"]["missing_charformat"],
         "figure_order": not report["figure_order"]["out_of_order"],
@@ -248,7 +276,50 @@ def cmd_audit(args):
     print(f"Success! Audit report written to: {args.output} (passed={report['passed']})")
 
 
-def fix_existing_ole_run(r_el, zin, rid_to_target, scale=0.875, is_inline=False):
+def _run_sz_pt(r_el):
+    rpr = r_el.find(f"{W}rPr")
+    if rpr is None:
+        return None
+    sz = rpr.find(f"{W}sz")
+    if sz is None or not sz.get(f"{W}val"):
+        return None
+    return int(sz.get(f"{W}val")) / 2.0
+
+
+def _context_font_pt(p):
+    sizes = []
+    mark = p.find(f"{W}pPr/{W}rPr/{W}sz")
+    if mark is not None and mark.get(f"{W}val"):
+        sizes.append(int(mark.get(f"{W}val")) / 2.0)
+    for r_el in p.findall(f"{W}r"):
+        if r_el.find(f".//{O}OLEObject") is not None:
+            continue
+        text = "".join(t.text or "" for t in r_el.findall(f"{W}t")).strip()
+        if not text:
+            continue
+        pt = _run_sz_pt(r_el)
+        if pt:
+            sizes.append(pt)
+    if not sizes:
+        return None
+    return max(set(sizes), key=sizes.count)
+
+
+def _ole_full_pt(r_el, zin, rid_to_target):
+    im = r_el.find(f".//{V}imagedata")
+    if im is None:
+        return None
+    rid = im.attrib.get(f"{R}id")
+    target = rid_to_target.get(rid)
+    if not target:
+        return None
+    name = target if target.startswith("word/") else "word/" + target.lstrip("/")
+    if name not in zin.namelist():
+        return None
+    return mb.wmf_main_font_pt(zin.read(name))
+
+
+def fix_existing_ole_run(r_el, zin, rid_to_target, scale=1.0, is_inline=False):
     im = r_el.find(f".//{V}imagedata")
     sh = r_el.find(f".//{V}shape")
     obj = r_el.find(f".//{W}object")
@@ -323,9 +394,26 @@ def cmd_build_mt(args):
             full_instr = " ".join(instrs)
             is_disp_eq = "SEQ" in full_instr and "公式" in full_instr
             h_scaled = 17.5
+            context_pt = _context_font_pt(p) or eq.get("mt_full_pt") or 10.5
             for r_el in p.findall(f".//{W}r"):
                 if r_el.find(f".//{O}OLEObject") is not None:
-                    res = fix_existing_ole_run(r_el, zin, rid_to_target, scale=args.scale, is_inline=(not is_disp_eq))
+                    full_pt = _ole_full_pt(r_el, zin, rid_to_target) or context_pt
+                    fit = (float(context_pt) / float(full_pt)) if full_pt else 1.0
+                    res = fix_existing_ole_run(
+                        r_el, zin, rid_to_target,
+                        scale=fit * args.scale,
+                        is_inline=(not is_disp_eq),
+                    )
+                    rpr = r_el.find(f"{W}rPr")
+                    if rpr is None:
+                        rpr = el(f"{W}rPr")
+                        r_el.insert(0, rpr)
+                    sz_el = rpr.find(f"{W}sz")
+                    half = str(int(round(float(context_pt) * 2)))
+                    if sz_el is None:
+                        rpr.append(el(f"{W}sz", {f"{W}val": half}))
+                    else:
+                        sz_el.set(f"{W}val", half)
                     if res:
                         h_scaled = res[1]
                         stats["normalized_oles"] += 1
@@ -437,7 +525,7 @@ def main():
     p_mt.add_argument("--input", required=True, help="Input .docx path")
     p_mt.add_argument("--output", required=True, help="Output .docx path")
     p_mt.add_argument("--report", required=True, help="Output JSON report path")
-    p_mt.add_argument("--scale", type=float, default=0.875, help="Uniform scale factor for OLE formulas")
+    p_mt.add_argument("--scale", type=float, default=1.0, help="Extra factor after matching the surrounding font size")
     p_mt.add_argument("--profile", default=tp.DEFAULT_PROFILE, help="Active profile JSON")
     p_mt.set_defaults(func=cmd_build_mt)
 

@@ -757,6 +757,29 @@ def tex_to_ast(tex):
     return parse_seq()
 
 
+def wmf_main_font_pt(wmf_bytes):
+    """Largest TrueType size in the WMF, in points. That is the formula's full size."""
+    if len(wmf_bytes) < 22:
+        return None
+    inch = struct.unpack_from("<IHhhhhHI", wmf_bytes, 0)[6]
+    unit = (inch / 72.0) if inch else 32.0
+    best = None
+    pos = 40
+    while pos + 6 <= len(wmf_bytes):
+        words, func = struct.unpack_from("<IH", wmf_bytes, pos)
+        if func == 0 or words < 3:
+            break
+        rec_len = words * 2
+        if func == 0x02FB and rec_len >= 8:
+            lfh = struct.unpack_from("<h", wmf_bytes, pos + 6)[0]
+            if lfh < 0 and unit:
+                pt = abs(lfh) / unit
+                if best is None or pt > best:
+                    best = pt
+        pos += rec_len
+    return best
+
+
 def inspect_wmf_metrics(wmf_bytes):
     """Read bounding box and main-text baseline (points from bottom) from an existing WMF."""
     _, _, left, top, right, bot, inch, _ = struct.unpack_from("<IHhhhhHI", wmf_bytes, 0)

@@ -455,6 +455,8 @@
     "body_no_line_start_unit_or_ref": true,
     "thousands_quarter_space": true,
     "unit_quarter_space": true,
+    "symbols_and_unit_numbers_in_formula": true,
+    "formula_size_matches_context": true,
     "list_marker": "1）",
     "figure_inline": true,
     "figure_center": true,
