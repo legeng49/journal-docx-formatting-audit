@@ -294,7 +294,8 @@ def _instruction_fields(text):
     if "顶线" in text and "0.75" in text:
         fields["border_top_bottom_eighths"] = 6
     if "栏目线" in text and "0.5" in text:
-        fields["border_inside_eighths"] = 4
+        fields["header_bottom_eighths"] = 4
+        fields["inside_h"] = "nil"
     photo = re.search(r"(\d+)\s*[×xX]\s*(\d+)\s*像素", text)
     if photo:
         fields["photo_min_px"] = [int(photo.group(1)), int(photo.group(2))]
@@ -809,7 +810,7 @@ def render_spec(profile):
         "",
         "## 图表字号",
         "",
-        f"- 图题、表题见 `caption_zh` / `caption_en`。图内文字见 `figure_interior`，当前为 {roles.get('figure_interior', {}).get('size_pt')} pt。表内文字见 `table_cell`，当前为 {roles.get('table_cell', {}).get('size_pt')} pt，行距 {roles.get('table_cell', {}).get('line_exact_pt')} pt。",
+        f"- 图题、表题见 `caption_zh` / `caption_en`。图内文字见 `figure_interior`，当前为 {roles.get('figure_interior', {}).get('size_pt')} pt。表内文字见 `table_cell`，当前为 {roles.get('table_cell', {}).get('size_pt')} pt，行距 {roles.get('table_cell', {}).get('line_exact_pt')} pt。三线表只给标题行加上下框线，只给末行加下框线，数据行之间不画横线。",
         "- 图内文字若只存在于位图中，OOXML 读不到字号。必须逐图核对为档案中的图内字号后，审计才可以带 `--figure-fonts-verified`。该开关不跳过任何其他闸门，也不能用来接受更小的字号。",
         "",
         "## 版面与停止",
@@ -1443,26 +1444,77 @@ def _check_page(doc, zin, page, violations):
             violations.append({"gate": "page_setup", "item": "auto_hyphenation", "expected": page["auto_hyphenation"], "actual": actual})
 
 
+def _border_on(el, expect_sz):
+    if el is None:
+        return False
+    val = _attr(el, "val")
+    sz = _attr(el, "sz")
+    if val in (None, "nil", "none"):
+        return False
+    if sz is None:
+        return False
+    return abs(int(sz) - int(expect_sz)) <= 1
+
+
+def _border_off(el):
+    if el is None:
+        return True
+    val = _attr(el, "val")
+    sz = int(_attr(el, "sz") or "0")
+    return val in (None, "nil", "none") or sz == 0
+
+
+def _row_edge(tr, edge):
+    """Return a cell border element if every cell in the row sets that edge."""
+    cells = tr.findall(f"{W}tc")
+    if not cells:
+        return None
+    found = []
+    for tc in cells:
+        borders = tc.find(f"{W}tcPr/{W}tcBorders")
+        found.append(None if borders is None else borders.find(f"{W}{edge}"))
+    if any(item is None for item in found):
+        return None
+    return found[0]
+
+
 def _check_tables(doc, spec, violations):
+    """三线表：标题行有上边线和栏目线，末行只有下边线，中间行没有横线。"""
     if not spec:
         return
+    top_sz = int(spec.get("border_top_bottom_eighths", 6))
+    header_sz = int(spec.get("header_bottom_eighths", spec.get("border_inside_eighths", 4)))
     for tbl in doc.findall(f".//{W}tbl"):
-        borders = tbl.find(f"{W}tblPr/{W}tblBorders")
-        if borders is None:
-            violations.append({"gate": "table_font", "item": "tblBorders", "expected": "three-line", "actual": None})
+        if tbl.find(f".//{W}tbl") is not None and tbl.find(f"{W}tr") is None:
             continue
-        for edge in ("top", "bottom"):
-            el = borders.find(f"{W}{edge}")
-            sz = _attr(el, "sz") if el is not None else None
-            if sz is None or abs(int(sz) - int(spec.get("border_top_bottom_eighths", 6))) > 1:
-                violations.append({"gate": "table_font", "item": edge, "expected": spec.get("border_top_bottom_eighths"), "actual": sz})
-        inside = borders.find(f"{W}insideH")
-        sz = _attr(inside, "sz") if inside is not None else None
-        if sz is None or abs(int(sz) - int(spec.get("border_inside_eighths", 4))) > 1:
-            violations.append({"gate": "table_font", "item": "insideH", "expected": spec.get("border_inside_eighths"), "actual": sz})
-        vert = borders.find(f"{W}insideV")
-        if vert is not None and (_attr(vert, "val") not in (None, "nil", "none")) and int(_attr(vert, "sz") or "0") > 0:
-            violations.append({"gate": "table_font", "item": "insideV", "expected": "nil", "actual": _attr(vert, "val")})
+        rows = [tr for tr in list(tbl) if _local(tr.tag) == "tr"]
+        if not rows:
+            continue
+        borders = tbl.find(f"{W}tblPr/{W}tblBorders")
+        top = borders.find(f"{W}top") if borders is not None else None
+        bottom = borders.find(f"{W}bottom") if borders is not None else None
+        header_top = _row_edge(rows[0], "top")
+        header_bottom = _row_edge(rows[0], "bottom")
+        last_bottom = _row_edge(rows[-1], "bottom")
+        if not (_border_on(top, top_sz) or _border_on(header_top, top_sz)):
+            violations.append({"gate": "table_font", "item": "header_top", "expected": top_sz, "actual": _attr(top, "sz") if top is not None else None})
+        if not (_border_on(header_bottom, header_sz) or (len(rows) == 1 and _border_on(bottom, header_sz))):
+            violations.append({"gate": "table_font", "item": "header_bottom", "expected": header_sz, "actual": _attr(header_bottom, "sz") if header_bottom is not None else None})
+        if len(rows) > 1 and not (_border_on(bottom, top_sz) or _border_on(last_bottom, top_sz)):
+            violations.append({"gate": "table_font", "item": "last_bottom", "expected": top_sz, "actual": _attr(bottom, "sz") if bottom is not None else None})
+        inside = borders.find(f"{W}insideH") if borders is not None else None
+        if spec.get("inside_h", "nil") == "nil" and not _border_off(inside):
+            violations.append({"gate": "table_font", "item": "insideH", "expected": "nil", "actual": _attr(inside, "val")})
+        for edge in ("left", "right", "insideV"):
+            el = borders.find(f"{W}{edge}") if borders is not None else None
+            if not _border_off(el):
+                violations.append({"gate": "table_font", "item": edge, "expected": "nil", "actual": _attr(el, "val")})
+        for tr in rows[1:-1]:
+            for edge in ("top", "bottom"):
+                el = _row_edge(tr, edge)
+                if el is not None and not _border_off(el):
+                    violations.append({"gate": "table_font", "item": "middle_row", "expected": "nil", "actual": edge})
+                    break
 
 
 def _check_columns(columns_path, policy, violations):

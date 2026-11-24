@@ -375,7 +375,8 @@
       "line_exact_pt": 14.0,
       "align": "center",
       "border_top_bottom_eighths": 6,
-      "border_inside_eighths": 4
+      "header_bottom_eighths": 4,
+      "inside_h": "nil"
     },
     "figure_interior": {
       "size_pt": 7.5,

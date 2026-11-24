@@ -42,7 +42,7 @@
 - `equation`：line=single；snap=True；before_twips=0；after_twips=0；align=right；mt_full_pt=10.5；mt_sub_pt=6.5；mt_ssub_pt=4.5；mt_symbol_pt=15.0；mt_subsymbol_pt=12.0
 - `caption_zh`：size_pt=9；eastAsia=黑体；ascii=Times New Roman；bold=True；align=center；line_exact_pt=14.0；before_pt=3.0；keep_next=True
 - `caption_en`：size_pt=9；ascii=Times New Roman；bold=True；align=center；line_exact_pt=14.0；after_pt=3.0；keep_next=True
-- `table_cell`：size_pt=7.5；eastAsia=宋体；ascii=Times New Roman；line_exact_pt=14.0；align=center；border_top_bottom_eighths=6；border_inside_eighths=4
+- `table_cell`：size_pt=7.5；eastAsia=宋体；ascii=Times New Roman；line_exact_pt=14.0；align=center；border_top_bottom_eighths=6；header_bottom_eighths=4；inside_h=nil
 - `figure_interior`：size_pt=7.5；eastAsia=宋体；ascii=Times New Roman
 - `references_heading`：size_pt=12.0；eastAsia=黑体；ascii=Times New Roman；before_pt=4.0；after_pt=4.0；line=single
 - `references`：size_pt=9；eastAsia=宋体；ascii=Times New Roman；line_exact_pt=14.0；hanging_twips=357
@@ -65,7 +65,7 @@
 
 ## 图表字号
 
-- 图题、表题见 `caption_zh` / `caption_en`。图内文字见 `figure_interior`，当前为 7.5 pt。表内文字见 `table_cell`，当前为 7.5 pt，行距 14.0 pt。
+- 图题、表题见 `caption_zh` / `caption_en`。图内文字见 `figure_interior`，当前为 7.5 pt。表内文字见 `table_cell`，当前为 7.5 pt，行距 14.0 pt。三线表只给标题行加上下框线，只给末行加下框线，数据行之间不画横线。
 - 图内文字若只存在于位图中，OOXML 读不到字号。必须逐图核对为档案中的图内字号后，审计才可以带 `--figure-fonts-verified`。该开关不跳过任何其他闸门，也不能用来接受更小的字号。
 
 ## 版面与停止
