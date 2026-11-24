@@ -396,7 +396,8 @@
       "eastAsia": "宋体",
       "ascii": "Times New Roman",
       "line_exact_pt": 14.0,
-      "hanging_twips": 357
+      "hanging_twips": 357,
+      "keep_lines": false
     },
     "biography": {
       "size_pt": 9,

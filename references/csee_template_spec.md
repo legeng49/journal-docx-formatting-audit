@@ -45,7 +45,7 @@
 - `table_cell`：size_pt=7.5；eastAsia=宋体；ascii=Times New Roman；line_exact_pt=14.0；align=center；border_top_bottom_eighths=6；header_bottom_eighths=4；inside_h=nil
 - `figure_interior`：size_pt=7.5；eastAsia=宋体；ascii=Times New Roman
 - `references_heading`：size_pt=12.0；eastAsia=黑体；ascii=Times New Roman；before_pt=4.0；after_pt=4.0；line=single
-- `references`：size_pt=9；eastAsia=宋体；ascii=Times New Roman；line_exact_pt=14.0；hanging_twips=357
+- `references`：size_pt=9；eastAsia=宋体；ascii=Times New Roman；line_exact_pt=14.0；hanging_twips=357；keep_lines=False
 - `biography`：size_pt=9；eastAsia=宋体；ascii=Times New Roman；line_exact_pt=14.0；first_line_twips=357；photo_min_px=[260, 330]
 - `acknowledgment_heading`：size_pt=10.5；eastAsia=黑体；align=center；before_pt=6.0；line=single；ascii=Times New Roman
 - `acknowledgment`：size_pt=9.0；eastAsia=楷体_GB2312；first_line_twips=420；line=single；align=both；ascii=楷体_GB2312
@@ -59,7 +59,7 @@
 - 数字自小数点起每 3 位留 1/4 字空：`True`。数字与单位之间留 1/4 字空：`True`。列项标记：`1）`。
 - 图用嵌入型并居中：`True` / `True`。中英文题成对：`True`。主副线、坐标标目、录波格值须目视核对：`True` / `True` / `True`。
 - 表头单位用分数，百分数写成 `φB/%`，列用制表位而不是空格对齐：`True` / `True` / `True`。
-- 参考文献编号后空 2 小格；括号半角、其余全角：`True`；GB/T 7714 类型标志：`True`；外文刊名不缩写：`True`。
+- 参考文献编号后空 2 小格；括号半角、其余全角：`True`；GB/T 7714 类型标志：`True`；外文刊名不缩写：`True`。条目允许段中分页、分栏，不得设置段中不分页。
 - 符号按 GB 3100～3102 且全文一致，缩写首次出现时给出中文全称(英文全称，缩写)：`True` / `True`。
 - 页眉须包含：中国电机工程学报、Proceedings of the CSEE。并核对页眉字号与居中、居右制表位。
 

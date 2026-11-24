@@ -799,7 +799,7 @@ def render_spec(profile):
             rules.get("figure_line_weight"), rules.get("figure_axis_label"), rules.get("figure_oscillograph")))
         lines.append("- 表头单位用分数，百分数写成 `φB/%%`，列用制表位而不是空格对齐：`%s` / `%s` / `%s`。" % (
             rules.get("table_unit_fraction"), rules.get("table_percent_phi"), rules.get("table_tab_align")))
-        lines.append("- 参考文献编号后空 %s 小格；括号半角、其余全角：`%s`；GB/T 7714 类型标志：`%s`；外文刊名不缩写：`%s`。" % (
+        lines.append("- 参考文献编号后空 %s 小格；括号半角、其余全角：`%s`；GB/T 7714 类型标志：`%s`；外文刊名不缩写：`%s`。条目允许段中分页、分栏，不得设置段中不分页。" % (
             rules.get("references_spaces_after_number"), rules.get("references_fullwidth_punct"),
             rules.get("references_gbt7714"), rules.get("references_full_journal_name")))
         lines.append("- 符号按 GB 3100～3102 且全文一致，缩写首次出现时给出中文全称(英文全称，缩写)：`%s` / `%s`。" % (
@@ -900,6 +900,8 @@ def _check_role(role, spec, props, runs, where, violations, gate):
         violations.append({"gate": gate, "where": where, "role": role, "item": "snap", "expected": True, "actual": False})
     if spec.get("keep_next") is True and not props.get("keep_next"):
         violations.append({"gate": gate, "where": where, "role": role, "item": "keep_next", "expected": True, "actual": False})
+    if spec.get("keep_lines") is False and props.get("keep_lines"):
+        violations.append({"gate": gate, "where": where, "role": role, "item": "keep_lines", "expected": False, "actual": True})
     if "label_eastAsia" in spec or spec.get("label_bold"):
         label = ""
         if role == "abstract_zh":
@@ -922,6 +924,7 @@ def _props_from_fields(fields, p):
     props = dict(fields)
     ppr = p.find(f"{W}pPr")
     props["keep_next"] = ppr is not None and ppr.find(f"{W}keepNext") is not None
+    props["keep_lines"] = ppr is not None and ppr.find(f"{W}keepLines") is not None
     if "before_pt" not in props:
         props["before_pt"] = 0
     if "after_pt" not in props:
@@ -1168,6 +1171,9 @@ def _check_line_breaks(columns_path, rules, violations):
     with open(columns_path, encoding="utf-8-sig") as f:
         data = json.load(f)
     breaks = data.get("line_breaks")
+    if breaks and breaks.get("checked") is False:
+        violations.append({"gate": "line_break", "item": "measurement", "expected": "Word 行遍历未完成", "actual": "checked=false"})
+        return
     if not breaks:
         violations.append({"gate": "line_break", "item": "measurement", "expected": "重新测量以得到 line_breaks", "actual": None})
         return
