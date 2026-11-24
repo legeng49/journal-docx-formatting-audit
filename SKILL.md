@@ -135,6 +135,12 @@ Word COM, file lock at `$env:USERPROFILE\.gemini\tmp\word_com.lock`. `-MaxDeltaP
 
 变量用斜体，单位、数字和文字型下标用正体。单位和普通标量不加粗；加粗只用于矢量或矩阵。
 
+## 行内公式必须完整
+
+一个语法完整的式子只能是同一个 MathType 对象。从函数名到配对的右括号、从等号左边到右边，都要在这一个对象里。不得拆成两个对象，让换行落在 `min{`、逗号、运算符或下标中间。行内公式只能在对象之前换行，不能从式子内部断开。
+
+数字和单位写在同一个对象里，例如 `5\,\mathrm{s}`、`1\,\mathrm{MJ}`、`0.15\,\mathrm{s}`。不要留在普通文字里写成 `5s`、`1MJ`。百分数写成 `95\%`、`60\%/20\%`，百分号紧贴数字，不要在 `%` 前加会把百分号挤到下一行的空格。中文里的斜线（如“初始/最低”）跟两边的字放在同一个文字串里，不要单独成一个运行。
+
 ## 格式修改顺序
 
 改稿按下面的顺序做。先做完前面一档并再跑一次 `audit`，再进入下一档。不要为了过后面的栏位检查，回过头去改已经符合档案的字体或行距。
@@ -170,3 +176,4 @@ Word COM calls share `$env:USERPROFILE\.gemini\tmp\word_com.lock` (120 s, poll 1
 5. **A trailing single-column section after 作者简介.** The last `sectPr` stays the two-column section.
 6. **A large exact line pitch on displayed equations.** Follow `roles.equation`. The current profile uses single spacing, not `line="646" lineRule="exact"`, and not a tighter pitch than that profile.
 7. **Leaving a merged display as two objects or a Word line break.** Formulas that share one number belong in one MathType object laid out as a k×1 matrix: 2 formulas are 2×1, 3 are 3×1, and so on. No matrix fences, no extra tabs.
+8. **Splitting one inline expression across objects.** A complete expression, including `min{...}` through its closing brace, stays in one MathType object. Bare `5s` or `1MJ`, and a percent sign separated from its number, are not acceptable.
